@@ -213,14 +213,30 @@ void processor_t::step(size_t n)
   mmu_t* _mmu = mmu;
 
   if (!state.debug_mode) {
-    if (halt_request == HR_REGULAR) {
-      enter_debug_mode(DCSR_CAUSE_DEBUGINT, 0);
-    } else if (halt_request == HR_GROUP) {
-      enter_debug_mode(DCSR_CAUSE_GROUP, 0);
-    } else if (halt_on_reset) {
-      halt_on_reset = false;
-      enter_debug_mode(DCSR_CAUSE_HALT, 0);
+    // Check if we can halt in supervisor mode when sdedbgalw controls this
+    bool can_halt_in_s_mode = true;
+    if (extension_enabled(EXT_SDSEC) && state.prv == PRV_S) {
+      can_halt_in_s_mode = state.msdcfg->get_sdedbgalw();
     }
+    
+    if (can_halt_in_s_mode) {
+      if (halt_request == HR_REGULAR) {
+        enter_debug_mode(DCSR_CAUSE_DEBUGINT, 0);
+      } else if (halt_request == HR_GROUP) {
+        enter_debug_mode(DCSR_CAUSE_GROUP, 0);
+      } else if (halt_on_reset) {
+        halt_on_reset = false;
+        enter_debug_mode(DCSR_CAUSE_HALT, 0);
+      }
+    } else if (halt_request != HR_NONE) {
+      // Issue warning when halt requests are pending due to sdedbgalw=0 in S mode
+      static bool warning_printed = false;
+      if (!warning_printed) {
+        fprintf(stderr, "warning: halt request pending in supervisor mode due to msdcfg.sdedbgalw=0\n");
+        warning_printed = true;
+      }
+    }
+    // If can_halt_in_s_mode is false, halt requests remain pending
   }
 
   while (n > 0) {
