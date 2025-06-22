@@ -99,6 +99,7 @@ public:
 protected:
   static action_t legalize_action(reg_t val, reg_t action_mask, reg_t dmode_mask) noexcept;
   bool common_match(processor_t * const proc, bool use_prev_prv = false) const noexcept;
+  bool can_fire(processor_t * const proc, bool use_prev_prv = false) const noexcept;
   reg_t tdata2;
 
   bool vs = false;
