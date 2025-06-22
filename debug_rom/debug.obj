@@ -1,0 +1,51 @@
+
+debug_rom:     file format elf64-littleriscv
+
+
+Disassembly of section .text:
+
+0000000000000800 <entry>:
+ 800:	00c0006f          	j	80c <_entry>
+
+0000000000000804 <resume>:
+ 804:	0640006f          	j	868 <_resume>
+
+0000000000000808 <exception>:
+ 808:	0380006f          	j	840 <_exception>
+
+000000000000080c <_entry>:
+ 80c:	0ff0000f          	fence
+ 810:	7b241073          	csrw	dscratch0,s0
+
+0000000000000814 <entry_loop>:
+ 814:	f1402473          	csrr	s0,mhartid
+ 818:	10802023          	sw	s0,256(zero) # 100 <whereto-0x200>
+ 81c:	40044403          	lbu	s0,1024(s0)
+ 820:	00147413          	andi	s0,s0,1
+ 824:	02041463          	bnez	s0,84c <going>
+ 828:	f1402473          	csrr	s0,mhartid
+ 82c:	40044403          	lbu	s0,1024(s0)
+ 830:	00247413          	andi	s0,s0,2
+ 834:	02041a63          	bnez	s0,868 <_resume>
+ 838:	10500073          	wfi
+ 83c:	fd9ff06f          	j	814 <entry_loop>
+
+0000000000000840 <_exception>:
+ 840:	7b202473          	csrr	s0,dscratch0
+ 844:	10002623          	sw	zero,268(zero) # 10c <whereto-0x1f4>
+ 848:	00100073          	ebreak
+
+000000000000084c <going>:
+ 84c:	f1402473          	csrr	s0,mhartid
+ 850:	10802223          	sw	s0,260(zero) # 104 <whereto-0x1fc>
+ 854:	7b202473          	csrr	s0,dscratch0
+ 858:	0ff0000f          	fence
+ 85c:	0000100f          	fence.i
+ 860:	7b405073          	csrwi	0x7b4,0
+ 864:	30000067          	jr	768(zero) # 300 <whereto>
+
+0000000000000868 <_resume>:
+ 868:	f1402473          	csrr	s0,mhartid
+ 86c:	10802423          	sw	s0,264(zero) # 108 <whereto-0x1f8>
+ 870:	7b202473          	csrr	s0,dscratch0
+ 874:	7b200073          	dret
