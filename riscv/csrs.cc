@@ -354,6 +354,23 @@ bool mseccfg_csr_t::unlogged_write(const reg_t val) noexcept {
   return basic_csr_t::unlogged_write(new_val);
 }
 
+// implement class msdcfg_csr_t
+msdcfg_csr_t::msdcfg_csr_t(processor_t* const proc, const reg_t addr):
+  basic_csr_t(proc, addr, 0) {
+}
+
+void msdcfg_csr_t::verify_permissions(insn_t insn, bool write) const {
+  basic_csr_t::verify_permissions(insn, write);
+  if (!proc->extension_enabled(EXT_SDSEC))
+    throw trap_illegal_instruction(insn.bits());
+}
+
+bool msdcfg_csr_t::unlogged_write(const reg_t val) noexcept {
+  // For now, msdcfg is a simple read/write CSR with no special behavior
+  // Add any specific logic for msdcfg here in the future
+  return basic_csr_t::unlogged_write(val);
+}
+
 // implement class virtualized_csr_t
 virtualized_csr_t::virtualized_csr_t(processor_t* const proc, csr_t_p orig, csr_t_p virt):
   csr_t(proc, orig->address),

@@ -152,6 +152,7 @@ struct state_t
   bool debug_mode;
 
   mseccfg_csr_t_p mseccfg;
+  msdcfg_csr_t_p msdcfg;
 
   static const int max_pmp = 64;
   pmpaddr_csr_t_p pmpaddr[max_pmp];

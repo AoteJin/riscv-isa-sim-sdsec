@@ -282,6 +282,7 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
   add_hypervisor_csr(CSR_HCONTEXT, hcontext);
   add_csr(CSR_MCONTEXT, mcontext = std::make_shared<proxy_csr_t>(proc, CSR_MCONTEXT, hcontext));
   add_csr(CSR_MSECCFG, mseccfg = std::make_shared<mseccfg_csr_t>(proc, CSR_MSECCFG));
+  add_csr(CSR_MSDCFG, msdcfg = std::make_shared<msdcfg_csr_t>(proc, CSR_MSDCFG));
 
   for (int i = 0; i < max_pmp; ++i) {
     add_csr(CSR_PMPADDR0 + i, pmpaddr[i] = std::make_shared<pmpaddr_csr_t>(proc, CSR_PMPADDR0 + i));
