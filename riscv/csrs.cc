@@ -1517,11 +1517,36 @@ void sdcsr_csr_t::verify_permissions(insn_t insn, bool write) const {
 }
 
 reg_t sdcsr_csr_t::read() const noexcept {
-  return dcsr->read();
+  reg_t dcsr_val = dcsr->read();
+  
+  // Mask out restricted fields: nmip, mprven, stoptime, stopcount, ebreakm, cetrig
+  const reg_t mask = DCSR_NMIP | DCSR_MPRVEN | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG;
+  dcsr_val &= ~mask;
+  
+  // Hardwire prv[1] to 0 (clear bit 1 of prv field)
+  dcsr_val &= ~(1 << 1);
+  
+  return dcsr_val;
 }
-//TODO : Add actual implementation to sdcsr
+
 bool sdcsr_csr_t::unlogged_write(const reg_t val) noexcept {
-  return dcsr->unlogged_write(val);
+  // Read current DCSR value to preserve restricted fields
+  reg_t current_dcsr = dcsr->read();
+  
+  // Mask out restricted fields from the new value
+  const reg_t mask = DCSR_NMIP | DCSR_MPRVEN | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG;
+  reg_t masked_val = val & ~mask;
+  
+  // Hardwire prv[1] to 0 (clear bit 1 of prv field)
+  masked_val &= ~(1 << 1);
+  
+  // Preserve the restricted fields from current DCSR
+  reg_t preserved_fields = current_dcsr & mask;
+  
+  // Combine the masked new value with preserved restricted fields
+  reg_t final_val = masked_val | preserved_fields;
+  
+  return dcsr->unlogged_write(final_val);
 }
 
 sdpc_csr_t::sdpc_csr_t(processor_t* const proc, const reg_t addr, csr_t_p dpc_ref):
