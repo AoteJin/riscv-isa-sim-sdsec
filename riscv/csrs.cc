@@ -1493,6 +1493,51 @@ void dcsr_csr_t::update_fields(const uint8_t cause, uint8_t ext_cause, const reg
   log_write();
 }
 
+// Shadow CSR implementations
+sdcsr_csr_t::sdcsr_csr_t(processor_t* const proc, const reg_t addr, dcsr_csr_t_p dcsr_ref):
+  csr_t(proc, addr), dcsr(dcsr_ref) {
+}
+
+void sdcsr_csr_t::verify_permissions(insn_t insn, bool write) const {
+  // Only accessible in debug mode
+  if (!proc->state.debug_mode)
+    throw trap_illegal_instruction(insn.bits());
+  
+  // Only accessible when Sdsec extension is enabled
+  if (!proc->extension_enabled(EXT_SDSEC))
+    throw trap_illegal_instruction(insn.bits());
+}
+
+reg_t sdcsr_csr_t::read() const noexcept {
+  return dcsr->read();
+}
+//TODO : Add actual implementation to sdcsr
+bool sdcsr_csr_t::unlogged_write(const reg_t val) noexcept {
+  return dcsr->unlogged_write(val);
+}
+
+sdpc_csr_t::sdpc_csr_t(processor_t* const proc, const reg_t addr, csr_t_p dpc_ref):
+  csr_t(proc, addr), dpc(dpc_ref) {
+}
+
+void sdpc_csr_t::verify_permissions(insn_t insn, bool write) const {
+  // Only accessible in debug mode
+  if (!proc->state.debug_mode)
+    throw trap_illegal_instruction(insn.bits());
+  
+  // Only accessible when Sdsec extension is enabled
+  if (!proc->extension_enabled(EXT_SDSEC))
+    throw trap_illegal_instruction(insn.bits());
+}
+
+reg_t sdpc_csr_t::read() const noexcept {
+  return dpc->read();
+}
+
+bool sdpc_csr_t::unlogged_write(const reg_t val) noexcept {
+  return dpc->unlogged_write(val);
+}
+
 float_csr_t::float_csr_t(processor_t* const proc, const reg_t addr, const reg_t mask, const reg_t init):
   masked_csr_t(proc, addr, mask, init) {
 }

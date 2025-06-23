@@ -391,7 +391,20 @@ void processor_t::enter_debug_mode(uint8_t cause, uint8_t extcause)
   state.debug_mode = true;
   state.dcsr->update_fields(cause, extcause, state.prv, state.v, state.elp);
   state.elp = elp_t::NO_LP_EXPECTED;
-  set_privilege(PRV_M, false);
+  
+  // Set debug mode privilege based on Sdsec extension
+  if (extension_enabled(EXT_SDSEC)) {
+    if (state.prv == PRV_M) {
+      set_privilege(PRV_M, false);
+    } else if (extension_enabled('H')) {
+      set_privilege(PRV_HS, false);
+    } else {
+      set_privilege(PRV_S, false);
+    }
+  } else {
+    // Sdsec disabled: always use M-mode
+    set_privilege(PRV_M, false);
+  }
   state.dpc->write(state.pc);
   state.pc = DEBUG_ROM_ENTRY;
   in_wfi = false;

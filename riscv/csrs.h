@@ -743,6 +743,29 @@ class dcsr_csr_t: public csr_t {
 
 typedef std::shared_ptr<dcsr_csr_t> dcsr_csr_t_p;
 
+// Shadow CSRs for debug access in sub-M mode
+class sdcsr_csr_t: public csr_t {
+ public:
+  sdcsr_csr_t(processor_t* const proc, const reg_t addr, dcsr_csr_t_p dcsr_ref);
+  virtual void verify_permissions(insn_t insn, bool write) const override;
+  virtual reg_t read() const noexcept override;
+ protected:
+  virtual bool unlogged_write(const reg_t val) noexcept override;
+ private:
+  dcsr_csr_t_p dcsr;
+};
+
+class sdpc_csr_t: public csr_t {
+ public:
+  sdpc_csr_t(processor_t* const proc, const reg_t addr, csr_t_p dpc_ref);
+  virtual void verify_permissions(insn_t insn, bool write) const override;
+  virtual reg_t read() const noexcept override;
+ protected:
+  virtual bool unlogged_write(const reg_t val) noexcept override;
+ private:
+  csr_t_p dpc;
+};
+
 class float_csr_t final: public masked_csr_t {
  public:
   float_csr_t(processor_t* const proc, const reg_t addr, const reg_t mask, const reg_t init);
