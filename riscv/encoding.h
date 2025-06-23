@@ -100,6 +100,7 @@
 #define DCSR_CAUSE          (7<<6)
 #define DCSR_V              (1<<5)
 #define DCSR_MPRVEN         (1<<4)
+#define DCSR_DMPRV          (1<<4)  // Sdsec: Debug Memory Privilege (reuses bit 4)
 #define DCSR_NMIP           (1<<3)
 #define DCSR_STEP           (1<<2)
 #define DCSR_PRV            (3<<0)
