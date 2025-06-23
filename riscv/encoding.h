@@ -305,6 +305,9 @@
 #define MSECCFG_MLPE   0x00000400
 #define MSECCFG_PMM    0x0000000300000000
 
+#define MSDCFG_SDEDBGALW  0x00000040
+#define MSDCFG_SDETRCALW  0x00000080
+
 /* jvt fields */
 #define JVT_MODE   0x3F
 #define JVT_BASE   (~0x3F)

@@ -365,6 +365,14 @@ void msdcfg_csr_t::verify_permissions(insn_t insn, bool write) const {
     throw trap_illegal_instruction(insn.bits());
 }
 
+bool msdcfg_csr_t::get_sdedbgalw() const noexcept {
+  return (read() & MSDCFG_SDEDBGALW);
+}
+
+bool msdcfg_csr_t::get_sdetrcalw() const noexcept {
+  return (read() & MSDCFG_SDETRCALW);
+}
+
 bool msdcfg_csr_t::unlogged_write(const reg_t val) noexcept {
   // For now, msdcfg is a simple read/write CSR with no special behavior
   // Add any specific logic for msdcfg here in the future

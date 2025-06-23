@@ -105,6 +105,21 @@ bool trigger_t::common_match(processor_t * const proc, bool use_prev_prv) const 
   return true;
 }
 
+bool trigger_t::can_fire(processor_t * const proc, bool use_prev_prv) const noexcept {
+  // Check SDSEC sdedbgalw bit: triggers must not fire when msdcfg.sdedbgalw=0 in S mode
+  if (proc->extension_enabled(EXT_SDSEC)) {
+    auto state = proc->get_state();
+    auto prv = use_prev_prv ? state->prev_prv : state->prv;
+    auto v = use_prev_prv ? state->prev_v : state->v;
+    
+    if (prv == PRV_S && !v) {
+      if (!state->msdcfg->get_sdedbgalw())
+        return false;
+    }
+  }
+  return true;
+}
+
 bool trigger_t::mode_match(reg_t prv, bool v) const noexcept
 {
   switch (prv) {
@@ -266,6 +281,11 @@ std::optional<match_result_t> mcontrol_common_t::detect_memory_access_match(proc
     /* This is OK because this function is only called if the trigger was not
      * inhibited by the previous trigger in the chain. */
     set_hit(timing ? HIT_IMMEDIATELY_AFTER : HIT_BEFORE);
+    
+    // Check if trigger can fire due to SDSEC sdedbgalw
+    if (!can_fire(proc))
+      return std::nullopt;
+      
     return match_result_t(timing_t(timing), action);
   }
   return std::nullopt;
@@ -359,9 +379,14 @@ std::optional<match_result_t> icount_t::detect_icount_fire(processor_t * const p
 
   std::optional<match_result_t> ret = std::nullopt;
   if (pending) {
-    pending = 0;
     hit = true;
-    ret = match_result_t(TIMING_BEFORE, action);
+    
+    // Check if trigger can fire due to SDSEC sdedbgalw
+    if (can_fire(proc)) {
+      pending = 0;
+      ret = match_result_t(TIMING_BEFORE, action);
+    }
+    // If can't fire, keep pending=1 so it can fire later when sdedbgalw=1
   }
 
   return ret;
@@ -463,6 +488,11 @@ std::optional<match_result_t> trap_common_t::detect_trap_match(processor_t * con
   assert(bit < xlen);
   if (simple_match(interrupt, bit)) {
     hit = true;
+    
+    // Check if trigger can fire due to SDSEC sdedbgalw (use prev_prv for trap triggers)
+    if (!can_fire(proc, true))
+      return std::nullopt;
+      
     return match_result_t(TIMING_AFTER, action);
   }
   return std::nullopt;

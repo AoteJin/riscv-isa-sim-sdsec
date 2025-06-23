@@ -162,6 +162,8 @@ class msdcfg_csr_t: public basic_csr_t {
  public:
   msdcfg_csr_t(processor_t* const proc, const reg_t addr);
   virtual void verify_permissions(insn_t insn, bool write) const override;
+  bool get_sdedbgalw() const noexcept;
+  bool get_sdetrcalw() const noexcept;
  protected:
   virtual bool unlogged_write(const reg_t val) noexcept override;
 };
