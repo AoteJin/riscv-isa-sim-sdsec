@@ -387,24 +387,15 @@ const char* processor_t::get_privilege_string() const
 
 void processor_t::enter_debug_mode(uint8_t cause, uint8_t extcause)
 {
+  // Sdsec: enter debug mode only when debug is allowed for the privilege
+  if (!is_debug_allowed(state.prv, state.v)) {
+    return;
+  }
   const bool has_zicfilp = extension_enabled(EXT_ZICFILP);
   state.debug_mode = true;
   state.dcsr->update_fields(cause, extcause, state.prv, state.v, state.elp);
   state.elp = elp_t::NO_LP_EXPECTED;
-  
-  // Set debug mode privilege based on Sdsec extension
-  if (extension_enabled(EXT_SDSEC)) {
-    if (state.prv == PRV_M) {
-      set_privilege(PRV_M, false);
-    } else if (extension_enabled('H')) {
-      set_privilege(PRV_HS, false);
-    } else {
-      set_privilege(PRV_S, false);
-    }
-  } else {
-    // Sdsec disabled: always use M-mode
-    set_privilege(PRV_M, false);
-  }
+  set_privilege(PRV_M, false);
   state.dpc->write(state.pc);
   state.pc = DEBUG_ROM_ENTRY;
   in_wfi = false;
@@ -442,6 +433,8 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
     } else {
       state.pc = DEBUG_ROM_TVEC;
     }
+    // Sdsec: Resume M-mode privilege when resuming to debug ROM entry  
+    set_privilege(PRV_M, false);
     return;
   }
 
@@ -855,4 +848,28 @@ void processor_t::trigger_updated(const std::vector<triggers::trigger_t *> &trig
       check_triggers_icount = true;
     }
   }
+}
+
+bool processor_t::is_debug_allowed(uint8_t prv, bool virt)
+{
+  if (extension_enabled(EXT_SDSEC)) {
+    switch (prv) { 
+      case PRV_M:
+        return is_mmode_debug_allowed();
+      default:
+        return is_mmode_debug_allowed() || state.msdcfg->get_sdedbgalw(); 
+    }
+  } else {
+    return true;
+  }
+}
+
+bool processor_t::is_mmode_debug_allowed() const {
+  return false;
+}
+
+void processor_t::set_debug_privilege() {
+  assert(is_mmode_debug_allowed() || state.msdcfg->get_sdedbgalw());
+  if (!is_mmode_debug_allowed())
+    set_privilege(PRV_S, false);
 }

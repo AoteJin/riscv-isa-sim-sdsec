@@ -1517,37 +1517,42 @@ void sdcsr_csr_t::verify_permissions(insn_t insn, bool write) const {
 }
 
 reg_t sdcsr_csr_t::read() const noexcept {
-  reg_t dcsr_val = dcsr->read();
+  reg_t sdcsr_val = dcsr->read();
   
-  // Mask out restricted fields: nmip, stoptime, stopcount, ebreakm, cetrig
-  // Note: mprven/dmprv (bit 4) is now accessible for Sdsec
-  const reg_t mask = DCSR_NMIP | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG;
-  dcsr_val &= ~mask;
+  // Mask out restricted fields: nmip, stoptime, stopcount, ebreakm, cetrig, mprven
+  // Note: dmprv (bit 4) is relaimed by sdcsr
+  const reg_t mask = DCSR_NMIP | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG | DCSR_MPRVEN;
+  sdcsr_val &= ~mask;
   
   // Hardwire prv[1] to 0 (clear bit 1 of prv field)
-  dcsr_val &= ~(1 << 1);
-  
-  return dcsr_val;
+  sdcsr_val &= ~(1 << 1);
+
+  sdcsr_val |= (dmprv << 4); // Set dmprv (bit 4)
+
+  return sdcsr_val;
 }
 
 bool sdcsr_csr_t::unlogged_write(const reg_t val) noexcept {
+  // Note: dmprv (bit 4) is relaimed by sdcsr
+  dmprv = get_field(val, SDCSR_DMPRV);
+
   // Read current DCSR value to preserve restricted fields
   reg_t current_dcsr = dcsr->read();
-  
+
   // Mask out restricted fields from the new value
-  // Note: mprven/dmprv (bit 4) is now accessible for Sdsec
   const reg_t mask = DCSR_NMIP | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG;
   reg_t masked_val = val & ~mask;
   
   // Hardwire prv[1] to 0 (clear bit 1 of prv field)
   masked_val &= ~(1 << 1);
-  
+
   // Preserve the restricted fields from current DCSR
   reg_t preserved_fields = current_dcsr & mask;
   
   // Combine the masked new value with preserved restricted fields
   reg_t final_val = masked_val | preserved_fields;
   
+  // FIXME: dmprv is not logged
   dcsr->write(final_val);
   return false; // avoid double logging: already logged by dcsr->write()
 }
@@ -1573,6 +1578,29 @@ reg_t sdpc_csr_t::read() const noexcept {
 bool sdpc_csr_t::unlogged_write(const reg_t val) noexcept {
   dpc->write(val);
   return false; // avoid double logging: already logged by dpc->write()
+}
+
+dbgcus_csr_t::dbgcus_csr_t(processor_t* const proc, const reg_t addr):
+  csr_t(proc, addr) {
+}
+
+void dbgcus_csr_t::verify_permissions(insn_t insn, bool write) const {
+  // Only accessible in debug mode
+  if (!state->debug_mode)
+    throw trap_illegal_instruction(insn.bits());
+  
+  // Only accessible when Sdsec extension is enabled
+  if (!proc->extension_enabled(EXT_SDSEC))
+    throw trap_illegal_instruction(insn.bits());
+}
+
+reg_t dbgcus_csr_t::read() const noexcept {
+  return 0;
+}
+
+bool dbgcus_csr_t::unlogged_write(const reg_t val) noexcept {
+  proc->set_debug_privilege();
+  return true;
 }
 
 float_csr_t::float_csr_t(processor_t* const proc, const reg_t addr, const reg_t mask, const reg_t init):

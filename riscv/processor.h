@@ -141,6 +141,7 @@ struct state_t
 
   csr_t_p dpc;
   dcsr_csr_t_p dcsr;
+  sdcsr_csr_t_p sdcsr;
   csr_t_p tselect;
   csr_t_p tdata2;
   csr_t_p tcontrol;
@@ -367,6 +368,10 @@ public:
   } halt_request;
 
   void trigger_updated(const std::vector<triggers::trigger_t *> &triggers);
+
+  bool is_debug_allowed(uint8_t prv, bool virt);
+  bool is_mmode_debug_allowed() const;
+  void set_debug_privilege();
 
   void set_pmp_num(reg_t pmp_num);
   void set_pmp_granularity(reg_t pmp_granularity);

@@ -711,37 +711,19 @@ mem_access_info_t mmu_t::generate_access_info(reg_t addr, access_type type, xlat
   
   // Handle debug mode privilege for Sdsec extension
   if (proc->state.debug_mode && proc->extension_enabled(EXT_SDSEC) && type != FETCH) {
-    reg_t dcsr_val = proc->state.dcsr->read();
-    bool dmprv = get_field(dcsr_val, DCSR_DMPRV);
     
-    if (dmprv) {
-      // dmprv=1: Use privilege from sstatus.spp and hstatus.spv
-      reg_t sstatus_val = proc->state.sstatus->read();
-      bool spp = get_field(sstatus_val, SSTATUS_SPP);
-      
+    // Sdsec: dmprv is effective only when M-mode debug is not allowed
+    if (!proc->is_debug_allowed(PRV_M, false)) {
+      bool dmprv = get_field(proc->state.sdcsr->read(), SDCSR_DMPRV);
+      // Sdsec: dmprv=1: Use privilege from sstatus.spp and hstatus.spv
+      bool spp = get_field(proc->state.sstatus->read(), SSTATUS_SPP);
       if (proc->extension_enabled('H')) {
-        reg_t hstatus_val = proc->state.hstatus->read();
-        bool spv = get_field(hstatus_val, HSTATUS_SPV);
-        
-        if (spv) {
-          // Virtual mode with privilege from spp
-          virt = true;
-          mode = spp ? PRV_S : PRV_U;
-        } else {
-          // Non-virtual mode with privilege from spp
-          virt = false;
-          mode = spp ? PRV_S : PRV_U;
-        }
-      } else {
-        // No hypervisor extension, use spp for privilege
-        virt = false;
-        mode = spp ? PRV_S : PRV_U;
+        bool spv = get_field(proc->state.hstatus->read(), HSTATUS_SPV);
+        virt = spv;
       }
+      mode = spp;
     }
-    // dmprv=0: Use default debug privilege already set by enter_debug_mode()
-    // No need to override mode/virt here
   } else if (type != FETCH) {
-    // Normal non-debug mode privilege handling
     if (in_mprv()) {
       mode = get_field(proc->state.mstatus->read(), MSTATUS_MPP);
       if (get_field(proc->state.mstatus->read(), MSTATUS_MPV) && mode != PRV_M)
@@ -751,9 +733,6 @@ mem_access_info_t mmu_t::generate_access_info(reg_t addr, access_type type, xlat
       virt = true;
       mode = get_field(proc->state.hstatus->read(), HSTATUS_SPVP);
     }
-  }
-  
-  if (type != FETCH) {
     auto xlen = proc->get_const_xlen();
     reg_t pmlen = get_pmlen(virt, mode, xlate_flags);
     reg_t satp = proc->state.satp->readvirt(virt);

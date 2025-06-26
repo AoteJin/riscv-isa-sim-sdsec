@@ -67,6 +67,10 @@ bool trigger_t::common_match(processor_t * const proc, bool use_prev_prv) const 
   auto prv = use_prev_prv ? state->prev_prv : state->prv;
   auto v = use_prev_prv ? state->prev_v : state->v;
 
+  // Sdsec: match or fire only when debug is allowed for the privilege
+  if (!proc->is_debug_allowed(prv, v))
+    return false;
+
   if (!mode_match(prv, v))
     return false;
 
@@ -102,21 +106,6 @@ bool trigger_t::common_match(processor_t * const proc, bool use_prev_prv) const 
     }
   }
 
-  return true;
-}
-
-bool trigger_t::can_fire(processor_t * const proc, bool use_prev_prv) const noexcept {
-  // Check SDSEC sdedbgalw bit: triggers must not fire when msdcfg.sdedbgalw=0 in S mode
-  if (proc->extension_enabled(EXT_SDSEC)) {
-    auto state = proc->get_state();
-    auto prv = use_prev_prv ? state->prev_prv : state->prv;
-    auto v = use_prev_prv ? state->prev_v : state->v;
-    
-    if (prv == PRV_S && !v) {
-      if (!state->msdcfg->get_sdedbgalw())
-        return false;
-    }
-  }
   return true;
 }
 
@@ -282,10 +271,6 @@ std::optional<match_result_t> mcontrol_common_t::detect_memory_access_match(proc
      * inhibited by the previous trigger in the chain. */
     set_hit(timing ? HIT_IMMEDIATELY_AFTER : HIT_BEFORE);
     
-    // Check if trigger can fire due to SDSEC sdedbgalw
-    if (!can_fire(proc))
-      return std::nullopt;
-      
     return match_result_t(timing_t(timing), action);
   }
   return std::nullopt;
@@ -379,14 +364,9 @@ std::optional<match_result_t> icount_t::detect_icount_fire(processor_t * const p
 
   std::optional<match_result_t> ret = std::nullopt;
   if (pending) {
+    pending = 0;
     hit = true;
-    
-    // Check if trigger can fire due to SDSEC sdedbgalw
-    if (can_fire(proc)) {
-      pending = 0;
-      ret = match_result_t(TIMING_BEFORE, action);
-    }
-    // If can't fire, keep pending=1 so it can fire later when sdedbgalw=1
+    ret = match_result_t(TIMING_BEFORE, action);
   }
 
   return ret;
@@ -426,7 +406,7 @@ void icount_t::tdata1_write(processor_t * const proc, const reg_t val, const boo
 {
   auto xlen = proc->get_xlen();
   assert(get_field(val, CSR_ICOUNT_TYPE(xlen)) == CSR_TDATA1_TYPE_ICOUNT);
-  dmode = proc->get_state()->debug_mode ? get_field(val, CSR_ICOUNT_DMODE(xlen)) : 0;
+  dmode = get_field(val, CSR_ICOUNT_DMODE(xlen));
   vs = get_field(val, CSR_ICOUNT_VS);
   vu = get_field(val, CSR_ICOUNT_VU);
   hit = get_field(val, CSR_ICOUNT_HIT);
@@ -489,10 +469,6 @@ std::optional<match_result_t> trap_common_t::detect_trap_match(processor_t * con
   if (simple_match(interrupt, bit)) {
     hit = true;
     
-    // Check if trigger can fire due to SDSEC sdedbgalw (use prev_prv for trap triggers)
-    if (!can_fire(proc, true))
-      return std::nullopt;
-      
     return match_result_t(TIMING_AFTER, action);
   }
   return std::nullopt;
@@ -558,7 +534,9 @@ reg_t module_t::tdata1_read(unsigned index) const noexcept
 bool module_t::tdata1_write(unsigned index, const reg_t val) noexcept
 {
   if (triggers[index]->get_dmode() && !proc->get_state()->debug_mode) {
-    return false;
+    // Sdsec: dmode is configurable by M-mode when debug is disallowd for M-mode 
+    if ((PRV_M != proc->get_state()->prv) || proc->is_debug_allowed(PRV_M, false)) 
+      return false;
   }
 
   auto xlen = proc->get_xlen();
@@ -573,7 +551,9 @@ bool module_t::tdata1_write(unsigned index, const reg_t val) noexcept
     assert(CSR_TDATA1_DMODE(xlen) == CSR_MCONTROL_DMODE(xlen));
     assert(CSR_TDATA1_DMODE(xlen) == CSR_ITRIGGER_DMODE(xlen));
     assert(CSR_TDATA1_DMODE(xlen) == CSR_ETRIGGER_DMODE(xlen));
-    tdata1 = set_field(tdata1, CSR_TDATA1_DMODE(xlen), 0);
+    // Sdsec: dmode is configurable by M-mode when debug is disallowd for M-mode 
+    if ((PRV_M != proc->get_state()->prv) || proc->is_debug_allowed(PRV_M, false)) 
+      tdata1 = set_field(tdata1, CSR_TDATA1_DMODE(xlen), 0);
   }
 
   // hardware should ignore writes that set dmode to 1 if the previous trigger has both dmode of 0 and chain of 1
@@ -608,7 +588,9 @@ reg_t module_t::tdata2_read(unsigned index) const noexcept
 bool module_t::tdata2_write(unsigned index, const reg_t val) noexcept
 {
   if (triggers[index]->get_dmode() && !proc->get_state()->debug_mode) {
-    return false;
+    // Sdsec: dmode is configurable by M-mode when debug is disallowd for M-mode 
+    if ((PRV_M != proc->get_state()->prv) || proc->is_debug_allowed(PRV_M, false)) 
+      return false;
   }
   triggers[index]->tdata2_write(proc, val);
   proc->trigger_updated(triggers);
@@ -623,7 +605,9 @@ reg_t module_t::tdata3_read(unsigned index) const noexcept
 bool module_t::tdata3_write(unsigned index, const reg_t val) noexcept
 {
   if (triggers[index]->get_dmode() && !proc->get_state()->debug_mode) {
-    return false;
+    // Sdsec: dmode is configurable by M-mode when debug is disallowd for M-mode 
+    if ((PRV_M != proc->get_state()->prv) || proc->is_debug_allowed(PRV_M, false)) 
+      return false;
   }
   triggers[index]->tdata3_write(proc, val);
   proc->trigger_updated(triggers);

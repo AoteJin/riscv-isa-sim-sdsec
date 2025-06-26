@@ -100,10 +100,12 @@
 #define DCSR_CAUSE          (7<<6)
 #define DCSR_V              (1<<5)
 #define DCSR_MPRVEN         (1<<4)
-#define DCSR_DMPRV          (1<<4)  // Sdsec: Debug Memory Privilege (reuses bit 4)
 #define DCSR_NMIP           (1<<3)
 #define DCSR_STEP           (1<<2)
 #define DCSR_PRV            (3<<0)
+
+#define SDCSR_DMPRV         (1<<4)  // Sdsec: Debug Memory Privilege (reuses bit 4)
+#define SDCSR_PRV           (1<<0)  
 
 #define DCSR_CAUSE_NONE     0
 #define DCSR_CAUSE_SWBP     1
@@ -2534,6 +2536,7 @@
 #define CSR_SRMCFG 0x181
 #define CSR_SDCSR 0x182
 #define CSR_SDPC 0x183
+#define CSR_DBGCUS 0x7b4
 #define CSR_SCONTEXT 0x5a8
 #define CSR_VSSTATUS 0x200
 #define CSR_VSIE 0x204
@@ -4090,6 +4093,7 @@ DECLARE_CSR(satp, CSR_SATP)
 DECLARE_CSR(srmcfg, CSR_SRMCFG)
 DECLARE_CSR(sdcsr, CSR_SDCSR)
 DECLARE_CSR(sdpc, CSR_SDPC)
+DECLARE_CSR(dbgcus, CSR_DBGCUS)
 DECLARE_CSR(scontext, CSR_SCONTEXT)
 DECLARE_CSR(vsstatus, CSR_VSSTATUS)
 DECLARE_CSR(vsie, CSR_VSIE)
