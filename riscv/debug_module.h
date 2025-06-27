@@ -36,6 +36,10 @@ struct dmcontrol_t {
 };
 
 struct dmstatus_t {
+  bool allsecfault;
+  bool anysecfault;
+  bool allsecured;
+  bool anysecured;
   bool impebreak;
   bool allhavereset;
   bool anyhavereset;
@@ -61,6 +65,7 @@ enum cmderr_t {
   CMDERR_NOTSUP = 2,
   CMDERR_EXCEPTION = 3,
   CMDERR_HALTRESUME = 4,
+  CMDERR_SECFAULT = 6,
   CMDERR_OTHER = 7
 };
 
@@ -92,11 +97,17 @@ struct sbcs_t {
   bool sbbusyerror;
 };
 
+struct dmcs2_t {
+  bool acksecfault;
+  // Other fields as needed
+};
+
 struct hart_debug_state_t {
   bool halted;
   bool resumeack;
   bool havereset;
   uint8_t haltgroup;
+  bool secfault;  // Track security fault for this hart
 };
 
 class debug_module_t : public abstract_device_t
@@ -193,6 +204,11 @@ class debug_module_t : public abstract_device_t
     void reset();
     bool perform_abstract_command();
 
+    // Security extension helper functions
+    bool hart_has_security_ext(unsigned hartid) const;
+    bool hart_mmode_debug_allowed(unsigned hartid) const;
+    void update_security_status();
+
     bool abstract_command_completed;
     unsigned rti_remaining;
 
@@ -206,6 +222,9 @@ class debug_module_t : public abstract_device_t
     bool hart_available(unsigned hart_id) const;
 
     unsigned sb_read_wait, sb_write_wait;
+
+    bool with_security_ext;
+    bool nsecdbg;
 };
 
 #endif

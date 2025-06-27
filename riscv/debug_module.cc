@@ -44,7 +44,9 @@ debug_module_t::debug_module_t(simif_t *sim, const debug_module_config_t &config
   hart_state(1 << field_width(sim->get_cfg().max_hartid() + 1)),
   hart_array_mask(sim->get_cfg().max_hartid() + 1),
   rti_remaining(0),
-  sb_read_wait(0), sb_write_wait(0)
+  sb_read_wait(0), sb_write_wait(0),
+  with_security_ext(false),
+  nsecdbg(false)
 {
   D(fprintf(stderr, "debug_data_start=0x%x\n", debug_data_start));
   D(fprintf(stderr, "debug_progbuf_start=0x%x\n", debug_progbuf_start));
@@ -55,6 +57,10 @@ debug_module_t::debug_module_t(simif_t *sim, const debug_module_config_t &config
     fprintf(stderr, "Hart IDs must not exceed %u (%zu harts with max hart ID %zu requested)\n",
             max_procs - 1, sim->get_cfg().nprocs(), sim->get_cfg().max_hartid());
     exit(1);
+  }
+
+  for (const auto& [hart_id, hart] : sim->get_harts()) {
+    with_security_ext |= hart->extension_enabled(EXT_SDSEC);
   }
 
   program_buffer = new uint8_t[program_buffer_bytes];
@@ -118,6 +124,11 @@ void debug_module_t::reset()
     sbcs.access16 = true;
   if (config.max_sba_data_width >= 8)
     sbcs.access8 = true;
+
+  // Initialize security fault status for all harts
+  for (auto& state : hart_state) {
+    state.secfault = false;
+  }
 
   challenge = random();
 }
@@ -278,6 +289,60 @@ bool debug_module_t::hart_selected(unsigned hartid) const
   return hartid == selected_hart_id() || (dmcontrol.hasel && hart_array_mask[hartid]);
 }
 
+// Helper function to check if hart implements Sdsec extension
+bool debug_module_t::hart_has_security_ext(unsigned hartid) const
+{
+  if (hartid >= sim->get_cfg().nprocs()) return false;
+  auto hart_it = sim->get_harts().find(hartid);
+  if (hart_it == sim->get_harts().end()) return false;
+  return hart_it->second->extension_enabled(EXT_SDSEC);
+}
+
+// Helper function to check if M-mode debug is allowed for a hart
+bool debug_module_t::hart_mmode_debug_allowed(unsigned hartid) const
+{
+  if (nsecdbg) return true;  // nsecdbg=1 allows all debug operations
+  if (hartid >= sim->get_cfg().nprocs()) return false;
+  auto hart_it = sim->get_harts().find(hartid);
+  if (hart_it == sim->get_harts().end()) return false;
+  
+  // If hart doesn't have Sdsec extension, M-mode debug is always allowed
+  if (!hart_it->second->extension_enabled(EXT_SDSEC)) return true;
+  
+  return hart_it->second->is_debug_allowed(PRV_M, false);
+}
+
+// Update security status for selected harts
+void debug_module_t::update_security_status()
+{
+  dmstatus.allsecured = true;
+  dmstatus.anysecured = false;
+  dmstatus.allsecfault = true;
+  dmstatus.anysecfault = false;
+  
+  // When nsecdbg=1, secured fields read as 0
+  if (nsecdbg) {
+    dmstatus.allsecured = false;
+    dmstatus.anysecured = false;
+  } else {
+    for (const auto& [hart_id, hart] : sim->get_harts()) {
+      if (hart_selected(hart_id)) {
+        if (hart_has_security_ext(hart_id)) {
+          dmstatus.anysecured = true;
+        } else {
+          dmstatus.allsecured = false;
+        }
+        
+        if (hart_state[hart_id].secfault) {
+          dmstatus.anysecfault = true;
+        } else {
+          dmstatus.allsecfault = false;
+        }
+      }
+    }
+  }
+}
+
 unsigned debug_module_t::sb_access_bits()
 {
   return 8 << sbcs.sbaccess;
@@ -325,6 +390,18 @@ void debug_module_t::sb_read()
 {
   reg_t address = ((uint64_t) sbaddress[1] << 32) | sbaddress[0];
   try {
+    // Security extension: Check if system bus access should be protected
+    // In a real implementation, this would be checked by IOPMP or similar protection
+    if (with_security_ext && !nsecdbg) {
+      bool access_allowed = true; 
+      // TODO: Implement security module to check if access is allowed
+      
+      if (!access_allowed) {
+        sbcs.error = 6; // SBERROR_SECFAULT
+        return;
+      }
+    }
+    
     if (sbcs.sbaccess == 0 && config.max_sba_data_width >= 8) {
       sbdata[0] = sim->debug_mmu->load<uint8_t>(address);
     } else if (sbcs.sbaccess == 1 && config.max_sba_data_width >= 16) {
@@ -362,6 +439,18 @@ void debug_module_t::sb_write()
   reg_t address = ((uint64_t) sbaddress[1] << 32) | sbaddress[0];
   D(fprintf(stderr, "sb_write() 0x%x @ 0x%lx\n", sbdata[0], address));
   try {
+    // Security extension: Check if system bus access should be protected
+    // In a real implementation, this would be checked by IOPMP or similar protection
+    if (with_security_ext && !nsecdbg) {
+      bool access_allowed = true; 
+      // TODO: Implement security module to check if access is allowed
+      
+      if (!access_allowed) {
+        sbcs.error = 6; // SBERROR_SECFAULT
+        return;
+      }
+    }
+    
     if (sbcs.sbaccess == 0 && config.max_sba_data_width >= 8) {
       sim->debug_mmu->store<uint8_t>(address, sbdata[0]);
     } else if (sbcs.sbaccess == 1 && config.max_sba_data_width >= 16) {
@@ -471,6 +560,9 @@ bool debug_module_t::dmi_read(unsigned address, uint32_t *value)
           // non-existent hartsel.
           dmstatus.anynonexistant = dmcontrol.hartsel >= sim->get_cfg().nprocs();
 
+          // Update security status fields
+          update_security_status();
+
           result = set_field(result, DM_DMSTATUS_IMPEBREAK,
               dmstatus.impebreak);
           result = set_field(result, DM_DMSTATUS_ALLHAVERESET, selected_hart_state().havereset);
@@ -488,6 +580,11 @@ bool debug_module_t::dmi_read(unsigned address, uint32_t *value)
           result = set_field(result, DM_DMSTATUS_AUTHENTICATED, dmstatus.authenticated);
           result = set_field(result, DM_DMSTATUS_AUTHBUSY, dmstatus.authbusy);
           result = set_field(result, DM_DMSTATUS_VERSION, dmstatus.version);
+          // Add security fields
+          result = set_field(result, DM_DMSTATUS_ALLSECURED, dmstatus.allsecured);
+          result = set_field(result, DM_DMSTATUS_ANYSECURED, dmstatus.anysecured);
+          result = set_field(result, DM_DMSTATUS_ALLSECFAULT, dmstatus.allsecfault);
+          result = set_field(result, DM_DMSTATUS_ANYSECFAULT, dmstatus.anysecfault);
         }
       	break;
       case DM_ABSTRACTCS:
@@ -649,6 +746,30 @@ bool debug_module_t::perform_abstract_command()
     return true;
   }
 
+  // Security extension checks
+  // NOTE: This just a placeholder for the security extension, since quick access and access memory are not supported yet
+  unsigned hart_id = selected_hart_id();
+  if (hart_has_security_ext(hart_id) && !hart_mmode_debug_allowed(hart_id)) {
+    // Check command type for security constraints
+    unsigned cmdtype = command >> 24;
+    
+    if (cmdtype == 1) {  // Quick Access command
+      // Quick Access is disallowed when M-mode debugging is disabled
+      abstractcs.cmderr = CMDERR_SECFAULT;
+      return true;
+    }
+    
+    if (cmdtype == 2) {  // Access Memory command
+      // Check AAMVIRTUAL field for memory access
+      bool aamvirtual = get_field(command, AC_ACCESS_MEMORY_AAMVIRTUAL);
+      if (!aamvirtual) {
+        // Physical address access not allowed when mdbgen=0
+        abstractcs.cmderr = CMDERR_SECFAULT;
+        return true;
+      }
+    }
+  }
+
   if ((command >> 24) == 0) {
     // register access
     unsigned size = get_field(command, AC_ACCESS_REGISTER_AARSIZE);
@@ -662,22 +783,27 @@ bool debug_module_t::perform_abstract_command()
 
     unsigned i = 0;
     if (get_field(command, AC_ACCESS_REGISTER_TRANSFER)) {
+      // Determine which scratch registers to use based on security extension
+      bool use_supervisor_regs = hart_has_security_ext(hart_id) && !hart_mmode_debug_allowed(hart_id);
+      unsigned scratch0_csr = use_supervisor_regs ? CSR_SDSCRATCH0 : CSR_DSCRATCH0;
+      unsigned scratch1_csr = use_supervisor_regs ? CSR_SDSCRATCH1 : CSR_DSCRATCH1;
+      unsigned status_csr = use_supervisor_regs ? CSR_SSTATUS : CSR_MSTATUS;
 
       if (is_fpu_reg(regno)) {
         // Save S0
-        write32(debug_abstract, i++, csrw(S0, CSR_DSCRATCH0));
-        // Save mstatus
-        write32(debug_abstract, i++, csrr(S0, CSR_MSTATUS));
-        write32(debug_abstract, i++, csrw(S0, CSR_DSCRATCH1));
-        // Set mstatus.fs
+        write32(debug_abstract, i++, csrw(S0, scratch0_csr));
+        // Save status register (mstatus or sstatus)
+        write32(debug_abstract, i++, csrr(S0, status_csr));
+        write32(debug_abstract, i++, csrw(S0, scratch1_csr));
+        // Set status.fs (works for both mstatus and sstatus)
         assert((MSTATUS_FS & 0xfff) == 0);
         write32(debug_abstract, i++, lui(S0, MSTATUS_FS >> 12));
-        write32(debug_abstract, i++, csrrs(ZERO, S0, CSR_MSTATUS));
+        write32(debug_abstract, i++, csrrs(ZERO, S0, status_csr));
       }
 
       if (regno < 0x1000 && config.support_abstract_csr_access) {
         if (!is_fpu_reg(regno)) {
-          write32(debug_abstract, i++, csrw(S0, CSR_DSCRATCH0));
+          write32(debug_abstract, i++, csrw(S0, scratch0_csr));
         }
 
         if (write) {
@@ -709,7 +835,7 @@ bool debug_module_t::perform_abstract_command()
           }
         }
         if (!is_fpu_reg(regno)) {
-          write32(debug_abstract, i++, csrr(S0, CSR_DSCRATCH0));
+          write32(debug_abstract, i++, csrr(S0, scratch0_csr));
         }
 
       } else if (regno >= 0x1000 && regno < 0x1020) {
@@ -741,7 +867,7 @@ bool debug_module_t::perform_abstract_command()
            * dscratch in case an exception occurs in a program buffer that
            * might be executed later.
            */
-          write32(debug_abstract, i++, csrw(S0, CSR_DSCRATCH0));
+          write32(debug_abstract, i++, csrw(S0, scratch0_csr));
         }
 
       } else if (regno >= 0x1020 && regno < 0x1040 && config.support_abstract_fpr_access) {
@@ -794,11 +920,11 @@ bool debug_module_t::perform_abstract_command()
       }
 
       if (is_fpu_reg(regno)) {
-        // restore mstatus
-        write32(debug_abstract, i++, csrr(S0, CSR_DSCRATCH1));
-        write32(debug_abstract, i++, csrw(S0, CSR_MSTATUS));
+        // restore status register (mstatus or sstatus)
+        write32(debug_abstract, i++, csrr(S0, scratch1_csr));
+        write32(debug_abstract, i++, csrw(S0, status_csr));
         // restore s0
-        write32(debug_abstract, i++, csrr(S0, CSR_DSCRATCH0));
+        write32(debug_abstract, i++, csrr(S0, scratch0_csr));
       }
     }
 
@@ -867,7 +993,14 @@ bool debug_module_t::dmi_write(unsigned address, uint32_t value)
           dmcontrol.haltreq = get_field(value, DM_DMCONTROL_HALTREQ);
           dmcontrol.resumereq = get_field(value, DM_DMCONTROL_RESUMEREQ);
           dmcontrol.hartreset = get_field(value, DM_DMCONTROL_HARTRESET);
-          dmcontrol.ndmreset = get_field(value, DM_DMCONTROL_NDMRESET);
+          
+          // Security extension: NDMRESET is read-only 0 when nsecdbg is 0
+          if (nsecdbg || !with_security_ext) {
+            dmcontrol.ndmreset = get_field(value, DM_DMCONTROL_NDMRESET);
+          } else {
+            dmcontrol.ndmreset = false;  // Read-only 0 when security extension is active
+          }
+          
           if (config.support_hasel)
             dmcontrol.hasel = get_field(value, DM_DMCONTROL_HASEL);
           else
@@ -881,6 +1014,23 @@ bool debug_module_t::dmi_write(unsigned address, uint32_t value)
               if (get_field(value, DM_DMCONTROL_ACKHAVERESET)) {
                 hart_state[hart_id].havereset = false;
               }
+              
+              // Handle keepalive operations with security constraints
+              if (get_field(value, DM_DMCONTROL_SETKEEPALIVE) && 
+                  !get_field(value, DM_DMCONTROL_CLRKEEPALIVE)) {
+                // SETKEEPALIVE only takes effect when M-mode debug is allowed
+                if (hart_mmode_debug_allowed(hart_id)) {
+                  // Set keepalive for this hart (implementation specific)
+                  // In a real implementation, this would set a keepalive flag in the hart
+                  D(fprintf(stderr, "set keepalive for hart %d\n", hart_id));
+                } 
+              }
+              
+              if (get_field(value, DM_DMCONTROL_CLRKEEPALIVE)) {
+                // Clear keepalive for this hart
+                D(fprintf(stderr, "clear keepalive for hart %d\n", hart_id));
+              }
+              
               if (dmcontrol.haltreq && hart_available(hart_id)) {
                 hart->halt_request = hart->HR_REGULAR;
                 D(fprintf(stderr, "halt hart %d\n", hart_id));
@@ -893,7 +1043,14 @@ bool debug_module_t::dmi_write(unsigned address, uint32_t value)
                 hart_state[hart_id].resumeack = false;
               }
               if (dmcontrol.hartreset && hart_available(hart_id)) {
-                hart->reset();
+                // Security extension: Check if M-mode debug is allowed for reset
+                if (hart_mmode_debug_allowed(hart_id)) {
+                  hart->reset();
+                } else {
+                  // Raise security fault error for this hart
+                  hart_state[hart_id].secfault = true;
+                  D(fprintf(stderr, "reset security fault for hart %d\n", hart_id));
+                }
               }
             }
           }
@@ -1008,6 +1165,15 @@ bool debug_module_t::dmi_write(unsigned address, uint32_t value)
             get_field(value, DM_DMCS2_HGWRITE) &&
             get_field(value, DM_DMCS2_GROUPTYPE) == 0) {
           selected_hart_state().haltgroup = get_field(value, DM_DMCS2_GROUP);
+        }
+        
+        // Handle ACKSECFAULT - clear security fault status for selected harts
+        if (get_field(value, DM_DMCS2_ACKSECFAULT)) {
+          for (const auto& [hart_id, hart] : sim->get_harts()) {
+            if (hart_selected(hart_id)) {
+              hart_state[hart_id].secfault = false;
+            }
+          }
         }
         return true;
       case DM_CUSTOM:

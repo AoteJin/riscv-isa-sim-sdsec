@@ -1925,6 +1925,34 @@
  * true: {dmcontrol-ndmreset} is currently nonzero, or there is an ndmreset in progress.
  */
 #define DM_DMSTATUS_NDMRESETPENDING_TRUE    1
+/*
+ * This field is 1 when all currently selected harts have raised a 
+ * security fault due to reset or keepalive operation.
+ */
+#define DM_DMSTATUS_ALLSECFAULT_OFFSET      0x1aULL
+#define DM_DMSTATUS_ALLSECFAULT_LENGTH      1ULL
+#define DM_DMSTATUS_ALLSECFAULT             0x4000000ULL
+/*
+ * This field is 1 when any currently selected hart has raised a 
+ * security fault due to reset or keepalive operation.
+ */
+#define DM_DMSTATUS_ANYSECFAULT_OFFSET      0x19ULL
+#define DM_DMSTATUS_ANYSECFAULT_LENGTH      1ULL
+#define DM_DMSTATUS_ANYSECFAULT             0x2000000ULL
+/*
+ * This field is 1 when all currently selected harts implement the 
+ * Sdsec extension. The field is 0 when nsecdbg is 1.
+ */
+#define DM_DMSTATUS_ALLSECURED_OFFSET       0x15ULL
+#define DM_DMSTATUS_ALLSECURED_LENGTH       1ULL
+#define DM_DMSTATUS_ALLSECURED              0x200000ULL
+/*
+ * This field is 1 when any currently selected hart implements the 
+ * Sdsec extension. The field is 0 when nsecdbg is 1.
+ */
+#define DM_DMSTATUS_ANYSECURED_OFFSET       0x14ULL
+#define DM_DMSTATUS_ANYSECURED_LENGTH       1ULL
+#define DM_DMSTATUS_ANYSECURED              0x100000ULL
 #define DM_DMSTATUS_STICKYUNAVAIL_OFFSET    0x17ULL
 #define DM_DMSTATUS_STICKYUNAVAIL_LENGTH    1ULL
 #define DM_DMSTATUS_STICKYUNAVAIL           0x800000ULL
@@ -2455,9 +2483,9 @@
  */
 #define DM_ABSTRACTCS_CMDERR_BUS            5
 /*
- * reserved: Reserved for future use.
+ * secfault: The abstract command failed due to a security fault error.
  */
-#define DM_ABSTRACTCS_CMDERR_RESERVED       6
+#define DM_ABSTRACTCS_CMDERR_SECFAULT       6
 /*
  * other: The command failed for another reason.
  */
@@ -2562,6 +2590,13 @@
 #define DM_AUTHDATA_DATA_LENGTH             0x20ULL
 #define DM_AUTHDATA_DATA                    0xffffffffULL
 #define DM_DMCS2                            0x32
+/*
+ * Writing 1 clears error status bits for any selected harts.
+ * Writing 0 has no effect.
+ */
+#define DM_DMCS2_ACKSECFAULT_OFFSET         0xcULL
+#define DM_DMCS2_ACKSECFAULT_LENGTH         1ULL
+#define DM_DMCS2_ACKSECFAULT                0x1000ULL
 #define DM_DMCS2_GROUPTYPE_OFFSET           0xbULL
 #define DM_DMCS2_GROUPTYPE_LENGTH           1ULL
 #define DM_DMCS2_GROUPTYPE                  0x800ULL
@@ -2774,6 +2809,10 @@
  * size: An access of unsupported size was requested.
  */
 #define DM_SBCS_SBERROR_SIZE                4
+/*
+ * secfault: A security fault error occurred during the bus access.
+ */
+#define DM_SBCS_SBERROR_SECFAULT            6
 /*
  * other: Other.
  */

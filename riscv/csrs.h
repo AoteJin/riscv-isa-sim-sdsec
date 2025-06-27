@@ -781,6 +781,18 @@ class dbgcus_csr_t: public csr_t {
   virtual bool unlogged_write(const reg_t val) noexcept override;
 };
 
+// Shadow scratch registers for supervisor-mode debug access
+class sdscratch_csr_t: public csr_t {
+ public:
+  sdscratch_csr_t(processor_t* const proc, const reg_t addr, csr_t_p dscratch_ref);
+  virtual void verify_permissions(insn_t insn, bool write) const override;
+  virtual reg_t read() const noexcept override;
+ protected:
+  virtual bool unlogged_write(const reg_t val) noexcept override;
+ private:
+  csr_t_p dscratch;
+};
+
 class float_csr_t final: public masked_csr_t {
  public:
   float_csr_t(processor_t* const proc, const reg_t addr, const reg_t mask, const reg_t init);

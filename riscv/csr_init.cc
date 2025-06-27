@@ -264,6 +264,12 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
   add_ext_csr(EXT_SDSEC, CSR_SDCSR, sdcsr = std::make_shared<sdcsr_csr_t>(proc, CSR_SDCSR, dcsr));
   add_ext_csr(EXT_SDSEC, CSR_SDPC, std::make_shared<sdpc_csr_t>(proc, CSR_SDPC, dpc));
   add_ext_csr(EXT_SDSEC, CSR_DBGCUS, std::make_shared<dbgcus_csr_t>(proc, CSR_DBGCUS));
+  
+  // Add shadow scratch registers for supervisor-mode debug access
+  auto dscratch0 = std::dynamic_pointer_cast<csr_t>(csrmap.find(CSR_DSCRATCH0)->second);
+  auto dscratch1 = std::dynamic_pointer_cast<csr_t>(csrmap.find(CSR_DSCRATCH1)->second);
+  add_ext_csr(EXT_SDSEC, CSR_SDSCRATCH0, std::make_shared<sdscratch_csr_t>(proc, CSR_SDSCRATCH0, dscratch0));
+  add_ext_csr(EXT_SDSEC, CSR_SDSCRATCH1, std::make_shared<sdscratch_csr_t>(proc, CSR_SDSCRATCH1, dscratch1));
 
   add_csr(CSR_TSELECT, tselect = std::make_shared<tselect_csr_t>(proc, CSR_TSELECT));
   if (proc->get_cfg().trigger_count > 0) {

@@ -1603,6 +1603,31 @@ bool dbgcus_csr_t::unlogged_write(const reg_t val) noexcept {
   return true;
 }
 
+// Shadow scratch register implementations
+sdscratch_csr_t::sdscratch_csr_t(processor_t* const proc, const reg_t addr, csr_t_p dscratch_ref):
+  csr_t(proc, addr), dscratch(dscratch_ref) {
+}
+
+void sdscratch_csr_t::verify_permissions(insn_t insn, bool write) const {
+  // Only accessible in debug mode
+  if (!state->debug_mode)
+    throw trap_illegal_instruction(insn.bits());
+  
+  // Only accessible when Sdsec extension is enabled
+  if (!proc->extension_enabled(EXT_SDSEC))
+    throw trap_illegal_instruction(insn.bits());
+    
+}
+
+reg_t sdscratch_csr_t::read() const noexcept {
+  return dscratch->read();
+}
+
+bool sdscratch_csr_t::unlogged_write(const reg_t val) noexcept {
+  dscratch->write(val);
+  return false; // avoid double logging: already logged by dscratch->write()
+}
+
 float_csr_t::float_csr_t(processor_t* const proc, const reg_t addr, const reg_t mask, const reg_t init):
   masked_csr_t(proc, addr, mask, init) {
 }
