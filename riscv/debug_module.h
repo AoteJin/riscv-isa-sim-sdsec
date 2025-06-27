@@ -109,14 +109,6 @@ struct hart_debug_state_t {
   bool resumeack;
   bool havereset;
   uint8_t haltgroup;
-  bool secfault;  // Track security fault for this hart
-};
-
-// structure to describe mmio region
-struct region_descriptor {
-  reg_t addr;           // 1st addr in a range
-  size_t len;           // range size
-  const uint8_t *bytes; // data
 };
 
 // structure to describe mmio region
@@ -253,6 +245,9 @@ class debug_module_t : public abstract_device_t
     bool hart_available(unsigned hart_id) const;
 
     unsigned sb_read_wait, sb_write_wait;
+
+    bool with_security_ext;
+    bool nsecdbg;
 
     std::array<region_descriptor, 6> debug_memory_regions;
 
