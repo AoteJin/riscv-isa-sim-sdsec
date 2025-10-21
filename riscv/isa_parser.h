@@ -49,6 +49,7 @@ typedef enum {
   EXT_SVNAPOT,
   EXT_SVPBMT,
   EXT_SVINVAL,
+  EXT_SVUKTE,
   EXT_ZDINX,
   EXT_ZFA,
   EXT_ZFBFMIN,
