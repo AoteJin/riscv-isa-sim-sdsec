@@ -823,6 +823,8 @@ bool misa_csr_t::unlogged_write(const reg_t val) noexcept {
     }
   }
 
+  proc->get_mmu()->flush_tlb();
+
   return basic_csr_t::unlogged_write(new_misa);
 }
 
