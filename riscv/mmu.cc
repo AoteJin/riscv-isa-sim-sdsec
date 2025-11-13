@@ -713,7 +713,7 @@ mem_access_info_t mmu_t::generate_access_info(reg_t addr, access_type type, xlat
   if (proc->state.debug_mode && proc->extension_enabled(EXT_SDSEC) && type != FETCH) {
     
     // Sdsec: dmprv is effective only when M-mode debug is not allowed
-    if (!proc->is_debug_allowed(PRV_M, false)) {
+    if (mode != PRV_M) {
       bool dmprv = get_field(proc->state.sdcsr->read(), SDCSR_DMPRV);
       // Sdsec: dmprv=1: Use privilege from sstatus.spp and hstatus.spv
       bool spp = get_field(proc->state.sstatus->read(), SSTATUS_SPP);
