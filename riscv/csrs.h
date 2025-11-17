@@ -164,6 +164,8 @@ class msdcfg_csr_t: public basic_csr_t {
   virtual void verify_permissions(insn_t insn, bool write) const override;
   bool get_sdedbgalw() const noexcept;
   bool get_sdetrcalw() const noexcept;
+  bool get_vsdedbgalw() const noexcept;
+  bool get_udedbgalw() const noexcept;
  protected:
   virtual bool unlogged_write(const reg_t val) noexcept override;
 };
@@ -771,6 +773,37 @@ class sdpc_csr_t: public csr_t {
  private:
   csr_t_p dpc;
 };
+
+typedef std::shared_ptr<sdpc_csr_t> sdpc_csr_t_p;
+
+// Shadow CSRs for debug access in U mode
+class udcsr_csr_t: public csr_t {
+ public:
+  udcsr_csr_t(processor_t* const proc, const reg_t addr, dcsr_csr_t_p dcsr_ref);
+  virtual void verify_permissions(insn_t insn, bool write) const override;
+  virtual reg_t read() const noexcept override;
+ protected:
+  virtual bool unlogged_write(const reg_t val) noexcept override;
+ private:
+  dcsr_csr_t_p dcsr;
+public :
+  bool dmprv;
+};
+
+typedef std::shared_ptr<udcsr_csr_t> udcsr_csr_t_p;
+
+class udpc_csr_t: public csr_t {
+ public:
+  udpc_csr_t(processor_t* const proc, const reg_t addr, csr_t_p dpc_ref);
+  virtual void verify_permissions(insn_t insn, bool write) const override;
+  virtual reg_t read() const noexcept override;
+ protected:
+  virtual bool unlogged_write(const reg_t val) noexcept override;
+ private:
+  csr_t_p dpc;
+};
+
+typedef std::shared_ptr<udpc_csr_t> udpc_csr_t_p;
 
 class dbgcus_csr_t: public csr_t {
  public:

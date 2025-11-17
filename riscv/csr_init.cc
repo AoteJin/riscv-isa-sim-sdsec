@@ -263,6 +263,8 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
   // Add shadow debug CSRs for sub-M mode access when Sdsec extension is enabled
   add_ext_csr(EXT_SDSEC, CSR_SDCSR, sdcsr = std::make_shared<sdcsr_csr_t>(proc, CSR_SDCSR, dcsr));
   add_ext_csr(EXT_SDSEC, CSR_SDPC, std::make_shared<sdpc_csr_t>(proc, CSR_SDPC, dpc));
+  add_ext_csr(EXT_SDSEC, CSR_UDCSR, udcsr = std::make_shared<udcsr_csr_t>(proc, CSR_UDCSR, dcsr));
+  add_ext_csr(EXT_SDSEC, CSR_UDPC, std::make_shared<udpc_csr_t>(proc, CSR_UDPC, dpc));
   add_ext_csr(EXT_SDSEC, CSR_DBGCUS, std::make_shared<dbgcus_csr_t>(proc, CSR_DBGCUS));
   
   // Add shadow scratch registers for supervisor-mode debug access

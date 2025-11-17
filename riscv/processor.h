@@ -142,6 +142,7 @@ struct state_t
   csr_t_p dpc;
   dcsr_csr_t_p dcsr;
   sdcsr_csr_t_p sdcsr;
+  udcsr_csr_t_p udcsr;
   csr_t_p tselect;
   csr_t_p tdata2;
   csr_t_p tcontrol;

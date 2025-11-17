@@ -373,6 +373,14 @@ bool msdcfg_csr_t::get_sdetrcalw() const noexcept {
   return (read() & MSDCFG_SDETRCALW);
 }
 
+bool msdcfg_csr_t::get_vsdedbgalw() const noexcept {
+  return (read() & MSDCFG_VSDEDBGALW);
+}
+
+bool msdcfg_csr_t::get_udedbgalw() const noexcept {
+  return (read() & MSDCFG_UDEDBGALW);
+}
+
 bool msdcfg_csr_t::unlogged_write(const reg_t val) noexcept {
   // For now, msdcfg is a simple read/write CSR with no special behavior
   // Add any specific logic for msdcfg here in the future
@@ -1576,6 +1584,103 @@ reg_t sdpc_csr_t::read() const noexcept {
 }
 
 bool sdpc_csr_t::unlogged_write(const reg_t val) noexcept {
+  dpc->write(val);
+  return false; // avoid double logging: already logged by dpc->write()
+}
+
+// Shadow CSR implementations for U mode
+udcsr_csr_t::udcsr_csr_t(processor_t* const proc, const reg_t addr, dcsr_csr_t_p dcsr_ref):
+  csr_t(proc, addr), dcsr(dcsr_ref) {
+}
+
+void udcsr_csr_t::verify_permissions(insn_t insn, bool write) const {
+  // Only accessible in debug mode
+  if (!state->debug_mode)
+    throw trap_illegal_instruction(insn.bits());
+  
+  // Only accessible when Sdsec extension is enabled
+  if (!proc->extension_enabled(EXT_SDSEC))
+    throw trap_illegal_instruction(insn.bits());
+}
+
+reg_t udcsr_csr_t::read() const noexcept {
+  reg_t udcsr_val = dcsr->read();
+  
+  // Mask out restricted fields: nmip, stoptime, stopcount, ebreakm, cetrig, mprven
+  // Note: dmprv (bit 4) is reclaimed by udcsr
+  const reg_t mask = DCSR_NMIP | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG | DCSR_MPRVEN;
+  udcsr_val &= ~mask;
+  
+  // Hardwire prv to 0 (U mode) - clear both bits 0 and 1
+  udcsr_val &= ~DCSR_PRV;
+
+  udcsr_val |= (dmprv << 4); // Set dmprv (bit 4)
+
+  return udcsr_val;
+}
+
+bool udcsr_csr_t::unlogged_write(const reg_t val) noexcept {
+  // Note: dmprv (bit 4) is reclaimed by udcsr
+  dmprv = get_field(val, SDCSR_DMPRV);
+
+  // Read current DCSR value to preserve restricted fields
+  reg_t current_dcsr = dcsr->read();
+
+  // Mask out restricted fields from the new value
+  const reg_t mask = DCSR_NMIP | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG
+  | DCSR_MPRVEN | DCSR_V | DCSR_STEP | DCSR_EBREAKS | DCSR_EBREAKVS | DCSR_EBREAKVU ;
+  
+  reg_t masked_val = val & ~mask;
+  
+  // Hardwire prv to 0 (U mode) 
+  masked_val &= ~DCSR_PRV;
+
+  // Preserve the restricted fields from current DCSR
+  reg_t preserved_fields = current_dcsr & mask;
+  
+  // Combine the masked new value with preserved restricted fields
+  reg_t final_val = masked_val | preserved_fields;
+
+  // If in virtualization mode, redirect ebreaku writes to ebreakvu
+  if (state->v && proc->extension_enabled('H')) {
+    bool ebreaku_val = get_field(val, DCSR_EBREAKU);
+    
+    // Always clear ebreaku in virtualization mode (it should never be set in DCSR)
+    final_val &= ~DCSR_EBREAKU;
+    
+    if (ebreaku_val) {
+      // Redirect ebreaku write to ebreakvu
+      final_val |= DCSR_EBREAKVU;
+    } else {
+      // ebreaku is being cleared, also clear ebreakvu
+      final_val &= ~DCSR_EBREAKVU;
+    }
+  }
+  
+  // FIXME: dmprv is not logged
+  dcsr->write(final_val);
+  return false; // avoid double logging: already logged by dcsr->write()
+}
+
+udpc_csr_t::udpc_csr_t(processor_t* const proc, const reg_t addr, csr_t_p dpc_ref):
+  csr_t(proc, addr), dpc(dpc_ref) {
+}
+
+void udpc_csr_t::verify_permissions(insn_t insn, bool write) const {
+  // Only accessible in debug mode
+  if (!state->debug_mode)
+    throw trap_illegal_instruction(insn.bits());
+  
+  // Only accessible when Sdsec extension is enabled
+  if (!proc->extension_enabled(EXT_SDSEC))
+    throw trap_illegal_instruction(insn.bits());
+}
+
+reg_t udpc_csr_t::read() const noexcept {
+  return dpc->read();
+}
+
+bool udpc_csr_t::unlogged_write(const reg_t val) noexcept {
   dpc->write(val);
   return false; // avoid double logging: already logged by dpc->write()
 }

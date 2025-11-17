@@ -1,5 +1,5 @@
 require_extension(EXT_ZCA);
-if (!STATE.debug_mode && (
+if (!STATE.debug_mode && p->is_debug_allowed(STATE.prv, STATE.v) && (
         (!STATE.v && STATE.prv == PRV_M && STATE.dcsr->ebreakm) ||
         (!STATE.v && STATE.prv == PRV_S && STATE.dcsr->ebreaks) ||
         (!STATE.v && STATE.prv == PRV_U && STATE.dcsr->ebreaku) ||
