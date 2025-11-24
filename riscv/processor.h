@@ -350,6 +350,7 @@ public:
     register_insn(insn, true /* is_custom */);
   }
   void register_extension(extension_t*);
+  void build_opcode_map();
 
   // MMIO slave interface
   bool load(reg_t addr, size_t len, uint8_t* bytes) override;
@@ -436,7 +437,6 @@ private:
   friend class extension_t;
 
   void parse_priv_string(const char*);
-  void build_opcode_map();
   void register_base_instructions();
   insn_func_t decode_insn(insn_t insn);
 
