@@ -786,8 +786,6 @@ class udcsr_csr_t: public csr_t {
   virtual bool unlogged_write(const reg_t val) noexcept override;
  private:
   dcsr_csr_t_p dcsr;
-public :
-  bool dmprv;
 };
 
 typedef std::shared_ptr<udcsr_csr_t> udcsr_csr_t_p;

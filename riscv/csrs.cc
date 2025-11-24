@@ -1527,6 +1527,17 @@ void sdcsr_csr_t::verify_permissions(insn_t insn, bool write) const {
 reg_t sdcsr_csr_t::read() const noexcept {
   reg_t sdcsr_val = dcsr->read();
   
+  // In VS mode, EBREAKS access is redirected to EBREAKVS
+  // Check DCSR's stored v and prv fields (from when debug mode was entered)
+  bool in_vs_mode = dcsr->v && dcsr->prv == PRV_S;
+  if (in_vs_mode) {
+    // EBREAKS field returns the value of EBREAKVS
+    reg_t ebreakvs_val = get_field(sdcsr_val, CSR_DCSR_EBREAKVS);
+    sdcsr_val = set_field(sdcsr_val, DCSR_EBREAKS, ebreakvs_val);
+    // EBREAKVS field returns 0
+    sdcsr_val = set_field(sdcsr_val, CSR_DCSR_EBREAKVS, 0);
+  }
+  
   // Mask out restricted fields: nmip, stoptime, stopcount, ebreakm, cetrig, mprven
   // Note: dmprv (bit 4) is relaimed by sdcsr
   const reg_t mask = DCSR_NMIP | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG | DCSR_MPRVEN;
@@ -1553,6 +1564,22 @@ bool sdcsr_csr_t::unlogged_write(const reg_t val) noexcept {
   
   // Hardwire prv[1] to 0 (clear bit 1 of prv field)
   masked_val &= ~(1 << 1);
+
+  // In VS mode, EBREAKS access is redirected to EBREAKVS
+  // Check DCSR's stored v and prv fields (from when debug mode was entered)
+  bool in_vs_mode = dcsr->v && dcsr->prv == PRV_S;
+  if (in_vs_mode) {
+    // In VS mode, writes to EBREAKS redirect to EBREAKVS (but EBREAKVS writes are dropped)
+    // Extract EBREAKS value from the write
+    reg_t ebreaks_val = get_field(val, DCSR_EBREAKS);
+    // Redirect to EBREAKVS (but EBREAKVS writes are dropped, so this has no effect)
+    // Clear EBREAKS from the write value (EBREAKS value gets dropped)
+    masked_val &= ~(DCSR_EBREAKS | CSR_DCSR_EBREAKVS);
+    // Preserve current EBREAKS value from DCSR (it doesn't get updated)
+    reg_t current_ebreaks = get_field(current_dcsr, DCSR_EBREAKS);
+    masked_val = set_field(masked_val, DCSR_EBREAKS, current_ebreaks);
+    masked_val = set_field(masked_val, CSR_DCSR_EBREAKVS, ebreaks_val);
+  }
 
   // Preserve the restricted fields from current DCSR
   reg_t preserved_fields = current_dcsr & mask;
@@ -1608,20 +1635,18 @@ reg_t udcsr_csr_t::read() const noexcept {
   
   // Mask out restricted fields: nmip, stoptime, stopcount, ebreakm, cetrig, mprven
   // Note: dmprv (bit 4) is reclaimed by udcsr
-  const reg_t mask = DCSR_NMIP | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG | DCSR_MPRVEN;
+  const reg_t mask = DCSR_NMIP | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG
+  | DCSR_MPRVEN | DCSR_V | DCSR_STEP | DCSR_EBREAKS | DCSR_EBREAKVS | DCSR_EBREAKVU ;
+
   udcsr_val &= ~mask;
   
   // Hardwire prv to 0 (U mode) - clear both bits 0 and 1
   udcsr_val &= ~DCSR_PRV;
 
-  udcsr_val |= (dmprv << 4); // Set dmprv (bit 4)
-
   return udcsr_val;
 }
 
 bool udcsr_csr_t::unlogged_write(const reg_t val) noexcept {
-  // Note: dmprv (bit 4) is reclaimed by udcsr
-  dmprv = get_field(val, SDCSR_DMPRV);
 
   // Read current DCSR value to preserve restricted fields
   reg_t current_dcsr = dcsr->read();
