@@ -871,27 +871,22 @@ bool debug_module_t::perform_abstract_register_access()
 
   unsigned i = 0;
   if (get_field(command, AC_ACCESS_REGISTER_TRANSFER)) {
-      // Determine which scratch registers to use based on security extension
-      bool use_supervisor_regs = hart_has_security_ext(hart_id) && !hart_mmode_debug_allowed(hart_id);
-      unsigned scratch0_csr = use_supervisor_regs ? CSR_SDSCRATCH0 : CSR_DSCRATCH0;
-      unsigned scratch1_csr = use_supervisor_regs ? CSR_SDSCRATCH1 : CSR_DSCRATCH1;
-      unsigned status_csr = use_supervisor_regs ? CSR_SSTATUS : CSR_MSTATUS;
 
     if (is_fpu_reg(regno)) {
       // Save S0
-      write32(debug_abstract, i++, csrw(S0, scratch0_csr));
-      // Save status register (mstatus or sstatus)
-      write32(debug_abstract, i++, csrr(S0, status_csr));
-      write32(debug_abstract, i++, csrw(S0, scratch1_csr));
-      // Set status.fs (works for both mstatus and sstatus)
+      write32(debug_abstract, i++, csrw(S0, CSR_DSCRATCH0));
+      // Save mstatus
+      write32(debug_abstract, i++, csrr(S0, CSR_MSTATUS));
+      write32(debug_abstract, i++, csrw(S0, CSR_DSCRATCH1));
+      // Set mstatus.fs
       assert((MSTATUS_FS & 0xfff) == 0);
       write32(debug_abstract, i++, lui(S0, MSTATUS_FS >> 12));
-      write32(debug_abstract, i++, csrrs(ZERO, S0, status_csr));
+      write32(debug_abstract, i++, csrrs(ZERO, S0, CSR_MSTATUS));
     }
 
     if (regno < 0x1000 && config.support_abstract_csr_access) {
       if (!is_fpu_reg(regno)) {
-        write32(debug_abstract, i++, csrw(S0, scratch0_csr));
+        write32(debug_abstract, i++, csrw(S0, CSR_DSCRATCH0));
       }
 
       if (write) {
@@ -931,7 +926,7 @@ bool debug_module_t::perform_abstract_register_access()
         }
       }
       if (!is_fpu_reg(regno)) {
-        write32(debug_abstract, i++, csrr(S0, scratch0_csr));
+        write32(debug_abstract, i++, csrr(S0, CSR_DSCRATCH0));
       }
 
     } else if (regno >= 0x1000 && regno < 0x1020) {
@@ -963,7 +958,7 @@ bool debug_module_t::perform_abstract_register_access()
          * dscratch in case an exception occurs in a program buffer that
          * might be executed later.
          */
-        write32(debug_abstract, i++, csrw(S0, scratch0_csr));
+        write32(debug_abstract, i++, csrw(S0, CSR_DSCRATCH0));
       }
 
     } else if (regno >= 0x1020 && regno < 0x1040 && config.support_abstract_fpr_access) {
@@ -1017,11 +1012,11 @@ bool debug_module_t::perform_abstract_register_access()
     }
 
     if (is_fpu_reg(regno)) {
-      // restore status register (mstatus or sstatus)
-      write32(debug_abstract, i++, csrr(S0, scratch1_csr));
-      write32(debug_abstract, i++, csrw(S0, status_csr));
+      // restore mstatus
+      write32(debug_abstract, i++, csrr(S0, CSR_DSCRATCH1));
+      write32(debug_abstract, i++, csrw(S0, CSR_MSTATUS));
       // restore s0
-      write32(debug_abstract, i++, csrr(S0, scratch0_csr));
+      write32(debug_abstract, i++, csrr(S0, CSR_DSCRATCH0));
     }
   }
 
