@@ -56,8 +56,6 @@ going:
         csrr s0, CSR_DSCRATCH0            // Restore s0 here
         fence
         fence.i
-        csrwi 0x7b4,0x0                  // Debug ROM writes the customized CSR to notify hart to enforce Sdsec security control
-                                         // The instructions  inserted by Debug module have been restricted to debug access privilege
         jalr zero, zero, %lo(whereto)    // Debug module will put different instructions and data in the RAM, 
                                          // so we use fence and fence.i for safety. (rocket-chip doesn't have this
                                          // because jalr is special there)

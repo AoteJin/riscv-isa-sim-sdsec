@@ -2,6 +2,8 @@
 
 // For std::any_of
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 
 #include "csrs.h"
 // For processor_t:
@@ -21,6 +23,21 @@
 // STATE macro used by require_privilege() macro:
 #undef STATE
 #define STATE (*state)
+
+// Helper function to get MSDCFG initial value from environment variable
+static reg_t get_msdcfg_init_from_env() {
+  const char* env_val = std::getenv("RISCV_MSDCFG_INIT");
+  if (env_val == nullptr || std::strlen(env_val) == 0) {
+    return 0;
+  }
+  char* endp;
+  unsigned long val = std::strtoul(env_val, &endp, 0);
+  if (*endp != '\0') {
+    // Invalid value, default to 0
+    return 0;
+  }
+  return static_cast<reg_t>(val);
+}
 
 // implement class csr_t
 csr_t::csr_t(processor_t* const proc, const reg_t addr):
@@ -356,7 +373,7 @@ bool mseccfg_csr_t::unlogged_write(const reg_t val) noexcept {
 
 // implement class msdcfg_csr_t
 msdcfg_csr_t::msdcfg_csr_t(processor_t* const proc, const reg_t addr):
-  basic_csr_t(proc, addr, 0) {
+  basic_csr_t(proc, addr, get_msdcfg_init_from_env()) {
 }
 
 void msdcfg_csr_t::verify_permissions(insn_t insn, bool write) const {
@@ -1515,6 +1532,7 @@ sdcsr_csr_t::sdcsr_csr_t(processor_t* const proc, const reg_t addr, dcsr_csr_t_p
 }
 
 void sdcsr_csr_t::verify_permissions(insn_t insn, bool write) const {
+  csr_t::verify_permissions(insn, write);
   // Only accessible in debug mode
   if (!state->debug_mode)
     throw trap_illegal_instruction(insn.bits());
@@ -1597,6 +1615,7 @@ sdpc_csr_t::sdpc_csr_t(processor_t* const proc, const reg_t addr, csr_t_p dpc_re
 }
 
 void sdpc_csr_t::verify_permissions(insn_t insn, bool write) const {
+  csr_t::verify_permissions(insn, write);
   // Only accessible in debug mode
   if (!state->debug_mode)
     throw trap_illegal_instruction(insn.bits());
@@ -1621,6 +1640,7 @@ udcsr_csr_t::udcsr_csr_t(processor_t* const proc, const reg_t addr, dcsr_csr_t_p
 }
 
 void udcsr_csr_t::verify_permissions(insn_t insn, bool write) const {
+  csr_t::verify_permissions(insn, write);
   // Only accessible in debug mode
   if (!state->debug_mode)
     throw trap_illegal_instruction(insn.bits());
@@ -1692,6 +1712,7 @@ udpc_csr_t::udpc_csr_t(processor_t* const proc, const reg_t addr, csr_t_p dpc_re
 }
 
 void udpc_csr_t::verify_permissions(insn_t insn, bool write) const {
+  csr_t::verify_permissions(insn, write);
   // Only accessible in debug mode
   if (!state->debug_mode)
     throw trap_illegal_instruction(insn.bits());
@@ -1729,7 +1750,13 @@ reg_t dbgcus_csr_t::read() const noexcept {
 }
 
 bool dbgcus_csr_t::unlogged_write(const reg_t val) noexcept {
-  proc->set_debug_privilege();
+  if ( val == 0) {
+    // Clear debug access privilege
+    proc->set_privilege(PRV_M, false);
+  } else if ( val == 1) {
+    // Set debug access privilege
+    proc->set_debug_privilege();
+  }
   return true;
 }
 
