@@ -1673,7 +1673,7 @@ bool udcsr_csr_t::unlogged_write(const reg_t val) noexcept {
 
   // Mask out restricted fields from the new value
   const reg_t mask = DCSR_NMIP | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG
-  | DCSR_MPRVEN | DCSR_V | DCSR_STEP | DCSR_EBREAKS | DCSR_EBREAKVS | DCSR_EBREAKVU ;
+  | DCSR_MPRVEN | DCSR_V |  DCSR_EBREAKS | DCSR_EBREAKVS | DCSR_EBREAKVU ;
   
   reg_t masked_val = val & ~mask;
   
