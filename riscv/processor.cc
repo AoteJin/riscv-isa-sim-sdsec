@@ -881,7 +881,11 @@ bool processor_t::is_debug_allowed(uint8_t prv, bool virt)
 }
 
 bool processor_t::is_mmode_debug_allowed() const {
-  return false;
+  const char* env_val = std::getenv("RISCV_MDBGEN_INIT");
+  if (env_val == nullptr || std::strlen(env_val) == 0) {
+    return false;  // Default to false for security
+  }
+  return std::strcmp(env_val, "1") == 0 || std::strcmp(env_val, "true") == 0;
 }
 
 void processor_t::set_debug_privilege() {
