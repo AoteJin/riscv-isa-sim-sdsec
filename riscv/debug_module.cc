@@ -788,32 +788,6 @@ bool debug_module_t::perform_abstract_command()
     return true;
   }
 
-  // Security extension checks
-  // NOTE: This just a placeholder for the security extension, since quick access and access memory are not supported yet
-  unsigned hart_id = selected_hart_id();
-  if (hart_has_security_ext(hart_id) && !hart_mmode_debug_allowed(hart_id)) {
-    // Check command type for security constraints
-    unsigned cmdtype = command >> 24;
-    
-    if (cmdtype == 1) {  // Quick Access command
-      // Quick Access is disallowed when M-mode debugging is disabled
-      abstractcs.cmderr = CMDERR_SECFAULT;
-      return true;
-    }
-    
-    if (cmdtype == 2) {  // Access Memory command
-      // Check AAMVIRTUAL field for memory access
-      bool aamvirtual = get_field(command, AC_ACCESS_MEMORY_AAMVIRTUAL);
-      if (!aamvirtual) {
-        // Physical address access not allowed when mdbgen=0
-        abstractcs.cmderr = CMDERR_SECFAULT;
-        return true;
-      }
-    }
-  }
-
-  // Security extension checks
-  // NOTE: This just a placeholder for the security extension, since quick access and access memory are not supported yet
   unsigned hart_id = selected_hart_id();
   if (hart_has_security_ext(hart_id) && !hart_mmode_debug_allowed(hart_id)) {
     // Check command type for security constraints
@@ -903,14 +877,14 @@ bool debug_module_t::perform_abstract_register_access()
         }
           // Set debug access privilege
           write32(debug_abstract, i++, csrsi(CSR_DBGCUS, 1));
-        write32(debug_abstract, i++, csrw(S0, regno));
+          write32(debug_abstract, i++, csrw(S0, regno));
           // Clear debug access privilege
           write32(debug_abstract, i++, csrw(ZERO, CSR_DBGCUS));
 
       } else {
           // Set debug access privilege
           write32(debug_abstract, i++, csrsi(CSR_DBGCUS, 1));
-        write32(debug_abstract, i++, csrr(S0, regno));
+          write32(debug_abstract, i++, csrr(S0, regno));
           // Clear debug access privilege
           write32(debug_abstract, i++, csrw(ZERO, CSR_DBGCUS));
         switch (size) {
@@ -1089,7 +1063,11 @@ unsigned debug_module_t::arg(unsigned xlen, unsigned idx)
 void debug_module_t::handle_memory_read(size_t xlen, unsigned aamsize, unsigned &offset)
 {
   write32(debug_abstract, offset++, lx[idx(xlen)](S1, ZERO, arg(xlen, 1)));
+  
+  write32(debug_abstract, offset++, csrsi(CSR_DBGCUS, 1));
   write32(debug_abstract, offset++, lx[aamsize](S1, S1, 0));
+  write32(debug_abstract, offset++, csrw(ZERO, CSR_DBGCUS));
+
   write32(debug_abstract, offset++, sx[idx(xlen)](S1, ZERO, arg(xlen, 0)));
 }
 
@@ -1100,7 +1078,9 @@ void debug_module_t::handle_memory_write(size_t xlen, unsigned aamsize, unsigned
   write32(debug_abstract, offset++, sx[idx(xlen)](S0, ZERO, arg(xlen, 1))); // S0 -> Arg1
   write32(debug_abstract, offset++, lx[idx(xlen)](S0, ZERO, arg(xlen, 0))); // Arg0 -> S0
 
+  write32(debug_abstract, offset++, csrsi(CSR_DBGCUS, 1));
   write32(debug_abstract, offset++, sx[aamsize](S0, S1, 0));
+  write32(debug_abstract, offset++, csrw(ZERO, CSR_DBGCUS));
 
   write32(debug_abstract, offset++, lx[idx(xlen)](S0, ZERO, arg(xlen, 1))); // Restore S0
 }
