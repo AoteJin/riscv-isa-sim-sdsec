@@ -821,7 +821,7 @@ mem_access_info_t mmu_t::generate_access_info(reg_t addr, access_type type, xlat
   reg_t transformed_addr = addr;
   
   // Handle debug mode privilege for Sdsec extension
-  if (proc->state.debug_mode && proc->extension_enabled(EXT_SDSEC) && type != FETCH) {
+  if (proc->state.debug_mode && proc->extension_enabled(EXT_SDSEC) && type != FETCH && mode != PRV_M) {
     
     // Sdsec: dmprv is effective only when M-mode debug is not allowed
     if (mode != PRV_M) {
