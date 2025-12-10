@@ -823,16 +823,13 @@ mem_access_info_t mmu_t::generate_access_info(reg_t addr, access_type type, xlat
   // Handle debug mode privilege for Sdsec extension
   if (proc->state.debug_mode && proc->extension_enabled(EXT_SDSEC) && type != FETCH && mode != PRV_M) {
     
-    // Sdsec: dmprv is effective only when M-mode debug is not allowed
-    if (mode != PRV_M) {
-      // Sdsec: dmprv=1: Use privilege from sstatus.spp and hstatus.spv
-      if (get_field(proc->state.sdcsr->read(), SDCSR_DMPRV) == 1) {
-      bool spp = get_field(proc->state.sstatus->read(), SSTATUS_SPP);
-      mode = spp;
-        if (proc->extension_enabled('H')) {
-          bool spv = get_field(proc->state.hstatus->read(), HSTATUS_SPV);
-          virt = spv;
-        }
+    // Sdsec: dmprv=1: Use privilege from sstatus.spp and hstatus.spv
+    if (get_field(proc->state.sdcsr->read(), SDCSR_DMPRV) == 1) {
+    bool spp = get_field(proc->state.sstatus->read(), SSTATUS_SPP);
+    mode = spp;
+      if (proc->extension_enabled('H')) {
+        bool spv = get_field(proc->state.hstatus->read(), HSTATUS_SPV);
+        virt = spv;
       }
     }
   } else if (proc->state.debug_mode && type == FETCH) {
