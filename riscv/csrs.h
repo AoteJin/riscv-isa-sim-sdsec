@@ -158,19 +158,18 @@ class mseccfg_csr_t: public basic_csr_t {
 
 typedef std::shared_ptr<mseccfg_csr_t> mseccfg_csr_t_p;
 
-class msdcfg_csr_t: public basic_csr_t {
+class mdtcfg_csr_t: public basic_csr_t {
  public:
-  msdcfg_csr_t(processor_t* const proc, const reg_t addr);
+  mdtcfg_csr_t(processor_t* const proc, const reg_t addr);
   virtual void verify_permissions(insn_t insn, bool write) const override;
-  bool get_sdedbgalw() const noexcept;
-  bool get_sdetrcalw() const noexcept;
-  bool get_vsdedbgalw() const noexcept;
-  bool get_udedbgalw() const noexcept;
+  bool get_sedbgalw() const noexcept;
+  bool get_vsedbgalw() const noexcept;
+  bool get_uedbgalw() const noexcept;
  protected:
   virtual bool unlogged_write(const reg_t val) noexcept override;
 };
 
-typedef std::shared_ptr<msdcfg_csr_t> msdcfg_csr_t_p;
+typedef std::shared_ptr<mdtcfg_csr_t> mdtcfg_csr_t_p;
 
 // For CSRs that have a virtualized copy under another name. Each
 // instance of virtualized_csr_t will read/write one of two CSRs,

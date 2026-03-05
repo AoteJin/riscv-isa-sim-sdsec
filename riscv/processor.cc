@@ -850,18 +850,18 @@ bool processor_t::is_debug_allowed(uint8_t prv, bool virt)
       case PRV_S:
         if (virt) {
           // VS mode
-          return is_mmode_debug_allowed() || state.msdcfg->get_vsdedbgalw() || state.msdcfg->get_sdedbgalw();
+          return is_mmode_debug_allowed() || state.mdtcfg->get_vsedbgalw() || state.mdtcfg->get_sedbgalw();
         } else {
           // S mode
-          return is_mmode_debug_allowed() || state.msdcfg->get_sdedbgalw();
+          return is_mmode_debug_allowed() || state.mdtcfg->get_sedbgalw();
         }
       case PRV_U:
         if (virt) {
         // VU mode debug 
-          return is_mmode_debug_allowed() || state.msdcfg->get_udedbgalw() || state.msdcfg->get_vsdedbgalw();
+          return is_mmode_debug_allowed() || state.mdtcfg->get_uedbgalw() || state.mdtcfg->get_vsedbgalw();
         } else {
           // U mode
-          return is_mmode_debug_allowed() || state.msdcfg->get_udedbgalw() || state.msdcfg->get_sdedbgalw();
+          return is_mmode_debug_allowed() || state.mdtcfg->get_uedbgalw() || state.mdtcfg->get_sedbgalw();
         }
       default:
         assert(false);
@@ -883,13 +883,13 @@ void processor_t::set_debug_privilege() {
   // Determine which privilege level to use based on debug permissions
   if (is_mmode_debug_allowed()) {
     set_privilege(PRV_M, false);
-  } else if (state.msdcfg->get_sdedbgalw() && !state.v) {
+  } else if (state.mdtcfg->get_sedbgalw() && !state.v) {
     // S mode debug allowed
     set_privilege(PRV_S, false);
-  } else if (state.msdcfg->get_vsdedbgalw() && state.v) {
+  } else if (state.mdtcfg->get_vsedbgalw() && state.v) {
     // VS mode debug allowed and currently virtualized
     set_privilege(PRV_S, true);
-  } else if (state.msdcfg->get_udedbgalw()) {
+  } else if (state.mdtcfg->get_uedbgalw()) {
     // U mode debug allowed
     if (state.v) {
       set_privilege(PRV_U, true);

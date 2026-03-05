@@ -161,7 +161,7 @@ struct state_t
   bool debug_mode;
 
   mseccfg_csr_t_p mseccfg;
-  msdcfg_csr_t_p msdcfg;
+  mdtcfg_csr_t_p mdtcfg;
   csr_t_p mseccfgh;
 
   static const int max_pmp = 64;

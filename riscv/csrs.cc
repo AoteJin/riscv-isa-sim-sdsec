@@ -24,9 +24,13 @@
 #undef STATE
 #define STATE (*state)
 
-// Helper function to get MSDCFG initial value from environment variable
-static reg_t get_msdcfg_init_from_env() {
-  const char* env_val = std::getenv("RISCV_MSDCFG_INIT");
+// Helper function to get MDTCFG initial value from environment variable.
+// Keep RISCV_MSDCFG_INIT as fallback for compatibility.
+static reg_t get_mdtcfg_init_from_env() {
+  const char* env_val = std::getenv("RISCV_MDTCFG_INIT");
+  if (env_val == nullptr || std::strlen(env_val) == 0) {
+    env_val = std::getenv("RISCV_MSDCFG_INIT");
+  }
   if (env_val == nullptr || std::strlen(env_val) == 0) {
     return 0;
   }
@@ -377,36 +381,32 @@ bool mseccfg_csr_t::unlogged_write(const reg_t val) noexcept {
   return basic_csr_t::unlogged_write(new_val);
 }
 
-// implement class msdcfg_csr_t
-msdcfg_csr_t::msdcfg_csr_t(processor_t* const proc, const reg_t addr):
-  basic_csr_t(proc, addr, get_msdcfg_init_from_env()) {
+// implement class mdtcfg_csr_t
+mdtcfg_csr_t::mdtcfg_csr_t(processor_t* const proc, const reg_t addr):
+  basic_csr_t(proc, addr, get_mdtcfg_init_from_env()) {
 }
 
-void msdcfg_csr_t::verify_permissions(insn_t insn, bool write) const {
+void mdtcfg_csr_t::verify_permissions(insn_t insn, bool write) const {
   basic_csr_t::verify_permissions(insn, write);
   if (!proc->extension_enabled(EXT_SDSEC))
     throw trap_illegal_instruction(insn.bits());
 }
 
-bool msdcfg_csr_t::get_sdedbgalw() const noexcept {
-  return (read() & MSDCFG_SDEDBGALW);
+bool mdtcfg_csr_t::get_sedbgalw() const noexcept {
+  return (read() & MDTCFG_SEDBGALW);
 }
 
-bool msdcfg_csr_t::get_sdetrcalw() const noexcept {
-  return (read() & MSDCFG_SDETRCALW);
+bool mdtcfg_csr_t::get_vsedbgalw() const noexcept {
+  return (read() & MDTCFG_VSEDBGALW);
 }
 
-bool msdcfg_csr_t::get_vsdedbgalw() const noexcept {
-  return (read() & MSDCFG_VSDEDBGALW);
+bool mdtcfg_csr_t::get_uedbgalw() const noexcept {
+  return (read() & MDTCFG_UEDBGALW);
 }
 
-bool msdcfg_csr_t::get_udedbgalw() const noexcept {
-  return (read() & MSDCFG_UDEDBGALW);
-}
-
-bool msdcfg_csr_t::unlogged_write(const reg_t val) noexcept {
-  // For now, msdcfg is a simple read/write CSR with no special behavior
-  // Add any specific logic for msdcfg here in the future
+bool mdtcfg_csr_t::unlogged_write(const reg_t val) noexcept {
+  // For now, mdtcfg is a simple read/write CSR with no special behavior.
+  // Add any specific logic for mdtcfg here in the future.
   return basic_csr_t::unlogged_write(val);
 }
 
