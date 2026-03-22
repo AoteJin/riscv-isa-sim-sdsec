@@ -405,9 +405,8 @@ bool mdtcfg_csr_t::get_uedbgalw() const noexcept {
 }
 
 bool mdtcfg_csr_t::unlogged_write(const reg_t val) noexcept {
-  // For now, mdtcfg is a simple read/write CSR with no special behavior.
-  // Add any specific logic for mdtcfg here in the future.
-  return basic_csr_t::unlogged_write(val);
+  const reg_t new_val = val & MDTCFG_WMASK;
+  return basic_csr_t::unlogged_write(new_val);
 }
 
 // implement class virtualized_csr_t
