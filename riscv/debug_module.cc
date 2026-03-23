@@ -875,18 +875,18 @@ bool debug_module_t::perform_abstract_register_access()
             abstractcs.cmderr = CMDERR_NOTSUP;
             return true;
         }
-          // Set debug access privilege
-          write32(debug_abstract, i++, csrsi(CSR_DBGCUS, 1));
+          if (hart_has_security_ext(selected_hart_id()))
+            write32(debug_abstract, i++, csrsi(CSR_DBGCUS, 1));
           write32(debug_abstract, i++, csrw(S0, regno));
-          // Clear debug access privilege
-          write32(debug_abstract, i++, csrw(ZERO, CSR_DBGCUS));
+          if (hart_has_security_ext(selected_hart_id()))
+            write32(debug_abstract, i++, csrw(ZERO, CSR_DBGCUS));
 
       } else {
-          // Set debug access privilege
-          write32(debug_abstract, i++, csrsi(CSR_DBGCUS, 1));
+          if (hart_has_security_ext(selected_hart_id()))
+            write32(debug_abstract, i++, csrsi(CSR_DBGCUS, 1));
           write32(debug_abstract, i++, csrr(S0, regno));
-          // Clear debug access privilege
-          write32(debug_abstract, i++, csrw(ZERO, CSR_DBGCUS));
+          if (hart_has_security_ext(selected_hart_id()))
+            write32(debug_abstract, i++, csrw(ZERO, CSR_DBGCUS));
         switch (size) {
           case 2:
             write32(debug_abstract, i++, sw(S0, ZERO, debug_data_start));
@@ -995,8 +995,8 @@ bool debug_module_t::perform_abstract_register_access()
   }
 
   if (get_field(command, AC_ACCESS_REGISTER_POSTEXEC)) {
-      // Set debug access privilege
-      write32(debug_abstract, i++, csrsi(CSR_DBGCUS, 1));
+      if (hart_has_security_ext(selected_hart_id()))
+        write32(debug_abstract, i++, csrsi(CSR_DBGCUS, 1));
     write32(debug_abstract, i,
         jal(ZERO, debug_progbuf_start - debug_abstract_start - 4 * i));
     i++;
@@ -1064,9 +1064,11 @@ void debug_module_t::handle_memory_read(size_t xlen, unsigned aamsize, unsigned 
 {
   write32(debug_abstract, offset++, lx[idx(xlen)](S1, ZERO, arg(xlen, 1)));
   
-  write32(debug_abstract, offset++, csrsi(CSR_DBGCUS, 1));
+  if (hart_has_security_ext(selected_hart_id()))
+    write32(debug_abstract, offset++, csrsi(CSR_DBGCUS, 1));
   write32(debug_abstract, offset++, lx[aamsize](S1, S1, 0));
-  write32(debug_abstract, offset++, csrw(ZERO, CSR_DBGCUS));
+  if (hart_has_security_ext(selected_hart_id()))
+    write32(debug_abstract, offset++, csrw(ZERO, CSR_DBGCUS));
 
   write32(debug_abstract, offset++, sx[idx(xlen)](S1, ZERO, arg(xlen, 0)));
 }
@@ -1078,9 +1080,11 @@ void debug_module_t::handle_memory_write(size_t xlen, unsigned aamsize, unsigned
   write32(debug_abstract, offset++, sx[idx(xlen)](S0, ZERO, arg(xlen, 1))); // S0 -> Arg1
   write32(debug_abstract, offset++, lx[idx(xlen)](S0, ZERO, arg(xlen, 0))); // Arg0 -> S0
 
-  write32(debug_abstract, offset++, csrsi(CSR_DBGCUS, 1));
+  if (hart_has_security_ext(selected_hart_id()))
+    write32(debug_abstract, offset++, csrsi(CSR_DBGCUS, 1));
   write32(debug_abstract, offset++, sx[aamsize](S0, S1, 0));
-  write32(debug_abstract, offset++, csrw(ZERO, CSR_DBGCUS));
+  if (hart_has_security_ext(selected_hart_id()))
+    write32(debug_abstract, offset++, csrw(ZERO, CSR_DBGCUS));
 
   write32(debug_abstract, offset++, lx[idx(xlen)](S0, ZERO, arg(xlen, 1))); // Restore S0
 }

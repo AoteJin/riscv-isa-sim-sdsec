@@ -857,11 +857,11 @@ bool processor_t::is_debug_allowed(uint8_t prv, bool virt)
         }
       case PRV_U:
         if (virt) {
-        // VU mode debug 
-          return is_mmode_debug_allowed() || state.mdtcfg->get_uedbgalw() || state.mdtcfg->get_vsedbgalw();
+          // VU mode: allowed by any of SEDBGALW, VSEDBGALW, or UEDBGALW
+          return is_mmode_debug_allowed() || state.mdtcfg->get_sedbgalw() || state.mdtcfg->get_vsedbgalw() || state.mdtcfg->get_uedbgalw();
         } else {
-          // U mode
-          return is_mmode_debug_allowed() || state.mdtcfg->get_uedbgalw() || state.mdtcfg->get_sedbgalw();
+          // U mode: allowed by SEDBGALW or UEDBGALW
+          return is_mmode_debug_allowed() || state.mdtcfg->get_sedbgalw() || state.mdtcfg->get_uedbgalw();
         }
       default:
         assert(false);
@@ -880,24 +880,17 @@ bool processor_t::is_mmode_debug_allowed() const {
 }
 
 void processor_t::set_debug_privilege() {
-  // Determine which privilege level to use based on debug permissions
+  // Spec: debug access privilege follows hierarchical control,
+  // independent of the hart's current virtualization state.
   if (is_mmode_debug_allowed()) {
     set_privilege(PRV_M, false);
-  } else if (state.mdtcfg->get_sedbgalw() && !state.v) {
-    // S mode debug allowed
+  } else if (state.mdtcfg->get_sedbgalw()) {
     set_privilege(PRV_S, false);
-  } else if (state.mdtcfg->get_vsedbgalw() && state.v) {
-    // VS mode debug allowed and currently virtualized
+  } else if (state.mdtcfg->get_vsedbgalw()) {
     set_privilege(PRV_S, true);
   } else if (state.mdtcfg->get_uedbgalw()) {
-    // U mode debug allowed
-    if (state.v) {
-      set_privilege(PRV_U, true);
-    } else {
-      set_privilege(PRV_U, false);
-    }
+    set_privilege(PRV_U, state.v);
   } else {
-    // At least one debug mode must be allowed
     assert(false);
   }
 }
