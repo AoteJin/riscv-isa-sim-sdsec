@@ -255,8 +255,9 @@ void processor_t::step(size_t n)
         while (instret < n)
         {
           if (unlikely(!state.serialized && state.single_step == state.STEP_STEPPED)) {
-            state.single_step = state.STEP_NONE;
-            if (!state.debug_mode) {
+            // Keep pending step state until debug entry is actually permitted.
+            if (!state.debug_mode && is_debug_allowed(state.prv, state.v)) {
+              state.single_step = state.STEP_NONE;
               enter_debug_mode(DCSR_CAUSE_STEP, 0);
               // enter_debug_mode changed state.pc, so we can't just continue.
               break;
@@ -342,8 +343,11 @@ void processor_t::step(size_t n)
       if (match.has_value())
         take_trigger_action(match->action, 0, state.pc, 0);
       else if (unlikely(state.single_step == state.STEP_STEPPED)) {
-        state.single_step = state.STEP_NONE;
-        enter_debug_mode(DCSR_CAUSE_STEP, 0);
+        // Defer step completion until execution reaches a debug-allowed privilege.
+        if (is_debug_allowed(state.prv, state.v)) {
+          state.single_step = state.STEP_NONE;
+          enter_debug_mode(DCSR_CAUSE_STEP, 0);
+        }
       }
     }
     catch (triggers::matched_t& t)
