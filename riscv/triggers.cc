@@ -67,8 +67,8 @@ bool trigger_t::common_match(processor_t * const proc, bool use_prev_prv) const 
   auto prv = use_prev_prv ? state->prev_prv : state->prv;
   auto v = use_prev_prv ? state->prev_v : state->v;
 
-  // Sdsec: match or fire only when debug is allowed for the privilege
-  if (!proc->is_debug_allowed(prv, v))
+  // External debug permission gates Debug Mode entry, not self-hosted exceptions.
+  if (get_action() == ACTION_DEBUG_MODE && !proc->is_debug_allowed(prv, v))
     return false;
 
   if (!mode_match(prv, v))
@@ -526,6 +526,13 @@ module_t::~module_t() {
   }
 }
 
+bool module_t::get_trigger_dmode(unsigned index) const noexcept
+{
+  if (index >= triggers.size())
+    return false;
+  return triggers[index]->get_dmode();
+}
+
 reg_t module_t::tdata1_read(unsigned index) const noexcept
 {
   return triggers[index]->tdata1_read(proc);
@@ -533,10 +540,8 @@ reg_t module_t::tdata1_read(unsigned index) const noexcept
 
 bool module_t::tdata1_write(unsigned index, const reg_t val) noexcept
 {
-  if (triggers[index]->get_dmode() && !proc->get_state()->debug_mode) {
-    // Sdsec: dmode is configurable by M-mode when debug is disallowd for M-mode 
-    if ((PRV_M != proc->get_state()->prv) || proc->is_debug_allowed(PRV_M, false)) 
-      return false;
+  if (triggers[index]->get_dmode() && !proc->can_manage_dmode()) {
+    return false;
   }
 
   auto xlen = proc->get_xlen();
@@ -546,14 +551,12 @@ bool module_t::tdata1_write(unsigned index, const reg_t val) noexcept
   // hardware must zero chain in writes that set dmode to 0 if the next trigger has dmode of 1
   const bool allow_chain = !(index+1 < triggers.size() && triggers[index+1]->get_dmode() && !get_field(val, CSR_TDATA1_DMODE(xlen)));
 
-  // dmode only writable from debug mode
-  if (!proc->get_state()->debug_mode) {
+  // dmode only writable from debug mode or allowed DMODE-managing mode
+  if (!proc->can_manage_dmode()) {
     assert(CSR_TDATA1_DMODE(xlen) == CSR_MCONTROL_DMODE(xlen));
     assert(CSR_TDATA1_DMODE(xlen) == CSR_ITRIGGER_DMODE(xlen));
     assert(CSR_TDATA1_DMODE(xlen) == CSR_ETRIGGER_DMODE(xlen));
-    // Sdsec: dmode is configurable by M-mode when debug is disallowd for M-mode 
-    if ((PRV_M != proc->get_state()->prv) || proc->is_debug_allowed(PRV_M, false)) 
-      tdata1 = set_field(tdata1, CSR_TDATA1_DMODE(xlen), 0);
+    tdata1 = set_field(tdata1, CSR_TDATA1_DMODE(xlen), 0);
   }
 
   // hardware should ignore writes that set dmode to 1 if the previous trigger has both dmode of 0 and chain of 1
@@ -587,10 +590,8 @@ reg_t module_t::tdata2_read(unsigned index) const noexcept
 
 bool module_t::tdata2_write(unsigned index, const reg_t val) noexcept
 {
-  if (triggers[index]->get_dmode() && !proc->get_state()->debug_mode) {
-    // Sdsec: dmode is configurable by M-mode when debug is disallowd for M-mode 
-    if ((PRV_M != proc->get_state()->prv) || proc->is_debug_allowed(PRV_M, false)) 
-      return false;
+  if (triggers[index]->get_dmode() && !proc->can_manage_dmode()) {
+    return false;
   }
   triggers[index]->tdata2_write(proc, val);
   proc->trigger_updated(triggers);
@@ -604,10 +605,8 @@ reg_t module_t::tdata3_read(unsigned index) const noexcept
 
 bool module_t::tdata3_write(unsigned index, const reg_t val) noexcept
 {
-  if (triggers[index]->get_dmode() && !proc->get_state()->debug_mode) {
-    // Sdsec: dmode is configurable by M-mode when debug is disallowd for M-mode 
-    if ((PRV_M != proc->get_state()->prv) || proc->is_debug_allowed(PRV_M, false)) 
-      return false;
+  if (triggers[index]->get_dmode() && !proc->can_manage_dmode()) {
+    return false;
   }
   triggers[index]->tdata3_write(proc, val);
   proc->trigger_updated(triggers);

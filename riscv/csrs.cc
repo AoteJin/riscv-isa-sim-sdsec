@@ -383,7 +383,8 @@ bool mseccfg_csr_t::unlogged_write(const reg_t val) noexcept {
 
 // implement class mdtcfg_csr_t
 mdtcfg_csr_t::mdtcfg_csr_t(processor_t* const proc, const reg_t addr):
-  basic_csr_t(proc, addr, get_mdtcfg_init_from_env()) {
+  basic_csr_t(proc, addr, get_mdtcfg_init_from_env() & MDTCFG_WMASK &
+    (proc->extension_enabled('H') ? ~reg_t(0) : ~reg_t(MDTCFG_VUEDBGALW))) {
 }
 
 void mdtcfg_csr_t::verify_permissions(insn_t insn, bool write) const {
@@ -404,8 +405,14 @@ bool mdtcfg_csr_t::get_uedbgalw() const noexcept {
   return (read() & MDTCFG_UEDBGALW);
 }
 
+bool mdtcfg_csr_t::get_vuedbgalw() const noexcept {
+  return (read() & MDTCFG_VUEDBGALW);
+}
+
 bool mdtcfg_csr_t::unlogged_write(const reg_t val) noexcept {
-  const reg_t new_val = val & MDTCFG_WMASK;
+  const reg_t mask = MDTCFG_WMASK &
+    (proc->extension_enabled('H') ? ~reg_t(0) : ~reg_t(MDTCFG_VUEDBGALW));
+  const reg_t new_val = val & mask;
   return basic_csr_t::unlogged_write(new_val);
 }
 
@@ -1455,6 +1462,248 @@ reg_t tinfo_csr_t::read() const noexcept {
   return proc->TM.tinfo_read(state->tselect->read());
 }
 
+static void get_trigger_mode_masks(unsigned type, reg_t &m_mask, reg_t &s_mask,
+                                   reg_t &u_mask, reg_t &vs_mask, reg_t &vu_mask) {
+  switch (type) {
+    case CSR_TDATA1_TYPE_MCONTROL6:
+      m_mask = CSR_MCONTROL6_M;
+      s_mask = CSR_MCONTROL6_S;
+      u_mask = CSR_MCONTROL6_U;
+      vs_mask = CSR_MCONTROL6_VS;
+      vu_mask = CSR_MCONTROL6_VU;
+      break;
+    case CSR_TDATA1_TYPE_ICOUNT:
+      m_mask = CSR_ICOUNT_M;
+      s_mask = CSR_ICOUNT_S;
+      u_mask = CSR_ICOUNT_U;
+      vs_mask = CSR_ICOUNT_VS;
+      vu_mask = CSR_ICOUNT_VU;
+      break;
+    case CSR_TDATA1_TYPE_ITRIGGER:
+      m_mask = CSR_ITRIGGER_M;
+      s_mask = CSR_ITRIGGER_S;
+      u_mask = CSR_ITRIGGER_U;
+      vs_mask = CSR_ITRIGGER_VS;
+      vu_mask = CSR_ITRIGGER_VU;
+      break;
+    case CSR_TDATA1_TYPE_ETRIGGER:
+      m_mask = CSR_ETRIGGER_M;
+      s_mask = CSR_ETRIGGER_S;
+      u_mask = CSR_ETRIGGER_U;
+      vs_mask = CSR_ETRIGGER_VS;
+      vu_mask = CSR_ETRIGGER_VU;
+      break;
+    default:
+      m_mask = s_mask = u_mask = vs_mask = vu_mask = 0;
+      break;
+  }
+}
+
+delegated_trig_csr_t::delegated_trig_csr_t(processor_t* const proc, const reg_t addr,
+                                           trig_deleg_view_t view, unsigned reg_idx) :
+  csr_t(proc, addr),
+  view(view),
+  reg_idx(reg_idx) {
+}
+
+bool delegated_trig_csr_t::is_type_supported(unsigned type) const noexcept {
+  if (view == TRIG_VIEW_U) {
+    return type == CSR_TDATA1_TYPE_MCONTROL6 ||
+           type == CSR_TDATA1_TYPE_ICOUNT ||
+           type == CSR_TDATA1_TYPE_DISABLED;
+  }
+  return type == CSR_TDATA1_TYPE_MCONTROL6 ||
+         type == CSR_TDATA1_TYPE_ICOUNT ||
+         type == CSR_TDATA1_TYPE_ITRIGGER ||
+         type == CSR_TDATA1_TYPE_ETRIGGER ||
+         type == CSR_TDATA1_TYPE_DISABLED;
+}
+
+bool delegated_trig_csr_t::is_dmode_blocked(unsigned index) const noexcept {
+  if (proc->TM.count() == 0)
+    return false;
+  return proc->TM.get_trigger_dmode(index) && !proc->can_manage_dmode();
+}
+
+void delegated_trig_csr_t::verify_permissions(insn_t insn, bool write UNUSED) const {
+  if (view == TRIG_VIEW_U) {
+    if (!proc->extension_enabled(EXT_SUTCFG))
+      throw trap_illegal_instruction(insn.bits());
+  } else {
+    if (!(proc->extension_enabled(EXT_SMTDELEG) || proc->extension_enabled(EXT_SSTCFG)))
+      throw trap_illegal_instruction(insn.bits());
+  }
+
+  // *ireg6 always raises illegal-instruction exception when *iselect == SISELECT_TRIG
+  if (reg_idx == 6)
+    throw trap_illegal_instruction(insn.bits());
+
+  if (proc->extension_enabled(EXT_SMSTATEEN)) {
+    if ((state->prv < PRV_M) && !(state->mstateen[0]->read() & MSTATEEN0_TR))
+      throw trap_illegal_instruction(insn.bits());
+
+    if ((view == TRIG_VIEW_VS || view == TRIG_VIEW_U) &&
+        state->v && !(state->hstateen[0]->read() & HSTATEEN0_TR))
+      throw trap_virtual_instruction(insn.bits());
+
+    if (view == TRIG_VIEW_U && proc->extension_enabled('S') &&
+        (state->prv < PRV_S) && !(state->sstateen[0]->read() & SSTATEEN0_TR)) {
+      if (state->v)
+        throw trap_virtual_instruction(insn.bits());
+      throw trap_illegal_instruction(insn.bits());
+    }
+  }
+}
+
+reg_t delegated_trig_csr_t::read() const noexcept {
+  if (reg_idx == 5)
+    return state->tselect->read();
+
+  if (proc->TM.count() == 0)
+    return 0;
+
+  const unsigned index = state->tselect->read();
+  if (is_dmode_blocked(index))
+    return 0;
+
+  const auto xlen = proc->get_xlen();
+  const reg_t cur_tdata1 = proc->TM.tdata1_read(index);
+  const unsigned cur_type = get_field(cur_tdata1, CSR_TDATA1_TYPE(xlen));
+
+  if (!is_type_supported(cur_type))
+    return 0;
+
+  switch (reg_idx) {
+    case 1: { // tdata1
+      if (!is_type_supported(cur_type))
+        return 0;
+      reg_t raw = cur_tdata1;
+      reg_t m_mask, s_mask, u_mask, vs_mask, vu_mask;
+      get_trigger_mode_masks(cur_type, m_mask, s_mask, u_mask, vs_mask, vu_mask);
+      if (view == TRIG_VIEW_S) {
+        raw &= ~m_mask;
+      } else if (view == TRIG_VIEW_VS) {
+        const bool vs_val = (raw & vs_mask) != 0;
+        const bool vu_val = (raw & vu_mask) != 0;
+        raw &= ~(m_mask | s_mask | u_mask | vs_mask | vu_mask);
+        if (vs_val) raw |= s_mask;
+        if (vu_val) raw |= u_mask;
+      } else { // TRIG_VIEW_U
+        if (!state->v) {
+          raw &= ~(m_mask | s_mask | vs_mask | vu_mask);
+        } else {
+          const bool vu_val = (raw & vu_mask) != 0;
+          raw &= ~(m_mask | s_mask | u_mask | vs_mask | vu_mask);
+          if (vu_val) raw |= u_mask;
+        }
+      }
+      return raw;
+    }
+    case 2: // tdata2
+      if (!is_type_supported(cur_type))
+        return 0;
+      return proc->TM.tdata2_read(index);
+    case 3: { // tdata3 (textra)
+      if (!is_type_supported(cur_type))
+        return 0;
+      if (view == TRIG_VIEW_U)
+        return 0;
+      reg_t raw = proc->TM.tdata3_read(index);
+      if (view == TRIG_VIEW_VS) {
+        const reg_t mh_mask = (xlen == 32)
+          ? (CSR_TEXTRA32_MHVALUE | CSR_TEXTRA32_MHSELECT)
+          : (CSR_TEXTRA64_MHVALUE | CSR_TEXTRA64_MHSELECT);
+        raw &= ~mh_mask;
+      }
+      return raw;
+    }
+    case 4: // tinfo
+      if (view == TRIG_VIEW_U) {
+        return (1 << CSR_TDATA1_TYPE_MCONTROL6) |
+               (1 << CSR_TDATA1_TYPE_ICOUNT) |
+               (1 << CSR_TDATA1_TYPE_DISABLED) |
+               (CSR_TINFO_VERSION_1 << CSR_TINFO_VERSION_OFFSET);
+      }
+      return (1 << CSR_TDATA1_TYPE_MCONTROL6) |
+             (1 << CSR_TDATA1_TYPE_ICOUNT) |
+             (1 << CSR_TDATA1_TYPE_ITRIGGER) |
+             (1 << CSR_TDATA1_TYPE_ETRIGGER) |
+             (1 << CSR_TDATA1_TYPE_DISABLED) |
+             (CSR_TINFO_VERSION_1 << CSR_TINFO_VERSION_OFFSET);
+    default:
+      return 0;
+  }
+}
+
+bool delegated_trig_csr_t::unlogged_write(const reg_t val) noexcept {
+  if (reg_idx == 5) {
+    state->tselect->write(val);
+    return false;
+  }
+
+  if (proc->TM.count() == 0)
+    return false;
+
+  const unsigned index = state->tselect->read();
+  if (is_dmode_blocked(index))
+    return false;
+
+  const auto xlen = proc->get_xlen();
+  const reg_t cur_tdata1 = proc->TM.tdata1_read(index);
+  const unsigned cur_type = get_field(cur_tdata1, CSR_TDATA1_TYPE(xlen));
+  if (!is_type_supported(cur_type))
+    return false;
+
+  switch (reg_idx) {
+    case 1: { // tdata1
+      unsigned new_type = get_field(val, CSR_TDATA1_TYPE(xlen));
+      if (new_type == 0)
+        new_type = CSR_TDATA1_TYPE_DISABLED;
+      if (!is_type_supported(new_type))
+        return false;
+
+      reg_t mapped = val;
+      reg_t m_mask, s_mask, u_mask, vs_mask, vu_mask;
+      get_trigger_mode_masks(new_type, m_mask, s_mask, u_mask, vs_mask, vu_mask);
+      if (view == TRIG_VIEW_S) {
+        mapped &= ~m_mask;
+      } else if (view == TRIG_VIEW_VS) {
+        const bool s_in = (val & s_mask) != 0;
+        const bool u_in = (val & u_mask) != 0;
+        mapped &= ~(m_mask | s_mask | u_mask | vs_mask | vu_mask);
+        if (s_in) mapped |= vs_mask;
+        if (u_in) mapped |= vu_mask;
+      } else { // TRIG_VIEW_U
+        if (!state->v) {
+          mapped &= ~(m_mask | s_mask | vs_mask | vu_mask);
+        } else {
+          const bool u_in = (val & u_mask) != 0;
+          mapped &= ~(m_mask | s_mask | u_mask | vs_mask | vu_mask);
+          if (u_in) mapped |= vu_mask;
+        }
+      }
+      return proc->TM.tdata1_write(index, mapped);
+    }
+    case 2: // tdata2
+      return proc->TM.tdata2_write(index, val);
+    case 3: { // tdata3
+      if (view == TRIG_VIEW_U)
+        return false;
+      reg_t mapped = val;
+      if (view == TRIG_VIEW_VS) {
+        const reg_t mh_mask = (xlen == 32)
+          ? (CSR_TEXTRA32_MHVALUE | CSR_TEXTRA32_MHSELECT)
+          : (CSR_TEXTRA64_MHVALUE | CSR_TEXTRA64_MHSELECT);
+        mapped &= ~mh_mask;
+      }
+      return proc->TM.tdata3_write(index, mapped);
+    }
+    case 4: // tinfo (writes ignored)
+    default:
+      return false;
+  }
+}
+
 debug_mode_csr_t::debug_mode_csr_t(processor_t* const proc, const reg_t addr):
   basic_csr_t(proc, addr, 0) {
 }
@@ -1677,7 +1926,7 @@ reg_t udcsr_csr_t::read() const noexcept {
   // Mask out restricted fields: nmip, stoptime, stopcount, ebreakm, cetrig, mprven
   // Note: dmprv (bit 4) is reclaimed by udcsr
   const reg_t mask = DCSR_NMIP | DCSR_STOPTIME | DCSR_STOPCOUNT | DCSR_EBREAKM | DCSR_CETRIG
-  | DCSR_MPRVEN | DCSR_V | DCSR_STEP | DCSR_EBREAKS | DCSR_EBREAKVS | DCSR_EBREAKVU ;
+  | DCSR_MPRVEN | DCSR_V | DCSR_EBREAKS | DCSR_EBREAKVS | DCSR_EBREAKVU ;
 
   udcsr_val &= ~mask;
   
@@ -2173,7 +2422,9 @@ void sscsrind_reg_csr_t::verify_permissions(insn_t insn, bool write) const {
       throw trap_virtual_instruction(insn.bits());
   }
 
-  if (proc->extension_enabled(EXT_SMCDELEG)) {
+  if (proc->extension_enabled(EXT_SMCDELEG) &&
+      iselect->read() >= SISELECT_SMCDELEG_START &&
+      iselect->read() <= SISELECT_SMCDELEG_END) {
     if (insn.csr() >= CSR_VSIREG && insn.csr() <= CSR_VSIREG6) {
       if (!state->v) {
         // An attempt to access any vsireg* from M or S mode raises an illegal instruction exception.
@@ -2537,6 +2788,82 @@ void siselect_csr_t::verify_permissions(insn_t insn, bool write) const {
   }
 
   basic_csr_t::verify_permissions(insn, write);
+}
+
+uiselect_csr_t::uiselect_csr_t(processor_t* const proc, const reg_t addr, const reg_t init):
+  basic_csr_t(proc, addr, init) {
+}
+
+void uiselect_csr_t::verify_permissions(insn_t insn, bool write) const {
+  basic_csr_t::verify_permissions(insn, write);
+
+  if (proc->extension_enabled(EXT_SMSTATEEN)) {
+    if ((state->prv < PRV_M) && !(state->mstateen[0]->read() & MSTATEEN0_UCSRIND))
+      throw trap_illegal_instruction(insn.bits());
+
+    if (state->v && !(state->hstateen[0]->read() & HSTATEEN0_UCSRIND))
+      throw trap_virtual_instruction(insn.bits());
+
+    if ((proc->extension_enabled('S') && state->prv < PRV_S) &&
+        !(state->sstateen[0]->read() & SSTATEEN0_UCSRIND)) {
+      if (state->v)
+        throw trap_virtual_instruction(insn.bits());
+      throw trap_illegal_instruction(insn.bits());
+    }
+  }
+}
+
+sucsrind_reg_csr_t::sucsrind_reg_csr_t(processor_t* const proc, const reg_t addr, csr_t_p iselect) :
+  csr_t(proc, addr),
+  iselect(iselect) {
+}
+
+void sucsrind_reg_csr_t::verify_permissions(insn_t insn, bool write) const {
+  csr_t::verify_permissions(insn, write);
+
+  if (proc->extension_enabled(EXT_SMSTATEEN)) {
+    if ((state->prv < PRV_M) && !(state->mstateen[0]->read() & MSTATEEN0_UCSRIND))
+      throw trap_illegal_instruction(insn.bits());
+
+    if (state->v && !(state->hstateen[0]->read() & HSTATEEN0_UCSRIND))
+      throw trap_virtual_instruction(insn.bits());
+
+    if ((proc->extension_enabled('S') && state->prv < PRV_S) &&
+        !(state->sstateen[0]->read() & SSTATEEN0_UCSRIND)) {
+      if (state->v)
+        throw trap_virtual_instruction(insn.bits());
+      throw trap_illegal_instruction(insn.bits());
+    }
+  }
+
+  csr_t_p proxy_csr = get_reg();
+  if (proxy_csr == nullptr)
+    throw trap_illegal_instruction(insn.bits());
+
+  proxy_csr->verify_permissions(insn, write);
+}
+
+reg_t sucsrind_reg_csr_t::read() const noexcept {
+  csr_t_p target_csr = get_reg();
+  if (target_csr != nullptr)
+    return target_csr->read();
+  return 0;
+}
+
+bool sucsrind_reg_csr_t::unlogged_write(const reg_t val) noexcept {
+  csr_t_p proxy_csr = get_reg();
+  if (proxy_csr != nullptr)
+    proxy_csr->write(val);
+  return false;
+}
+
+csr_t_p sucsrind_reg_csr_t::get_reg() const noexcept {
+  auto it = ireg_proxy.find(iselect->read());
+  return it != ireg_proxy.end() ? it->second : nullptr;
+}
+
+void sucsrind_reg_csr_t::add_ireg_proxy(const reg_t iselect_value, csr_t_p csr) {
+  ireg_proxy[iselect_value] = csr;
 }
 
 aia_csr_t::aia_csr_t(processor_t* const proc, const reg_t addr, const reg_t mask, const reg_t init):

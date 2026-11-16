@@ -365,6 +365,7 @@ void processor_t::enter_debug_mode(uint8_t cause, uint8_t extcause)
     return;
   }
   const bool has_zicfilp = extension_enabled(EXT_ZICFILP);
+  state.single_step = state.STEP_NONE;
   state.debug_mode = true;
   state.dcsr->update_fields(cause, extcause, state.prv, state.v, state.elp);
   state.elp = elp_t::NO_LP_EXPECTED;
@@ -857,8 +858,8 @@ bool processor_t::is_debug_allowed(uint8_t prv, bool virt)
         }
       case PRV_U:
         if (virt) {
-          // VU mode: allowed by any of SEDBGALW, VSEDBGALW, or UEDBGALW
-          return is_mmode_debug_allowed() || state.mdtcfg->get_sedbgalw() || state.mdtcfg->get_vsedbgalw() || state.mdtcfg->get_uedbgalw();
+          return is_mmode_debug_allowed() || state.mdtcfg->get_sedbgalw() ||
+                 state.mdtcfg->get_vsedbgalw() || state.mdtcfg->get_vuedbgalw();
         } else {
           // U mode: allowed by SEDBGALW or UEDBGALW
           return is_mmode_debug_allowed() || state.mdtcfg->get_sedbgalw() || state.mdtcfg->get_uedbgalw();
@@ -879,17 +880,33 @@ bool processor_t::is_mmode_debug_allowed() const {
   return std::strcmp(env_val, "1") == 0 || std::strcmp(env_val, "true") == 0;
 }
 
+bool processor_t::can_manage_dmode() const {
+  if (state.debug_mode)
+    return true;
+  if (!extension_enabled(EXT_SDSEC))
+    return false;
+  if (state.prv == PRV_M)
+    return !is_mmode_debug_allowed();
+  if (state.prv == PRV_S && !state.v)
+    return !is_mmode_debug_allowed() && !state.mdtcfg->get_sedbgalw();
+  if (state.prv == PRV_S && state.v)
+    return !is_mmode_debug_allowed() && !state.mdtcfg->get_sedbgalw() &&
+           !state.mdtcfg->get_uedbgalw() && !state.mdtcfg->get_vsedbgalw();
+  return false;
+}
+
 void processor_t::set_debug_privilege() {
-  // Spec: debug access privilege follows hierarchical control,
-  // independent of the hart's current virtualization state.
+  const bool guest = state.dcsr->v;
   if (is_mmode_debug_allowed()) {
     set_privilege(PRV_M, false);
   } else if (state.mdtcfg->get_sedbgalw()) {
     set_privilege(PRV_S, false);
-  } else if (state.mdtcfg->get_vsedbgalw()) {
+  } else if (guest && state.mdtcfg->get_vsedbgalw()) {
     set_privilege(PRV_S, true);
-  } else if (state.mdtcfg->get_uedbgalw()) {
-    set_privilege(PRV_U, state.v);
+  } else if (guest && state.mdtcfg->get_vuedbgalw()) {
+    set_privilege(PRV_U, true);
+  } else if (!guest && state.mdtcfg->get_uedbgalw()) {
+    set_privilege(PRV_U, false);
   } else {
     assert(false);
   }

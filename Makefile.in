@@ -360,6 +360,13 @@ deps : $(deps)
 # Check
 #-------------------------------------------------------------------------
 
+trigger-delegation-utst.out: libriscv.a libdisasm.a libsoftfloat.a libfesvr.a libfdt.a \
+  $(src_dir)/ci-tests/trigger-delegation.cc $(src_dir)/ci-tests/test-trigger-delegation
+	CXX="$(CXX)" $(src_dir)/ci-tests/test-trigger-delegation "$(CURDIR)" > $@
+
+test_outs += trigger-delegation-utst.out
+junk += trigger-delegation-utst.out
+
 check : $(test_outs)
 	echo; grep -h -e'Unit Tests' -e'FAILED' -e'Segementation' $^ < /dev/null; echo
 
@@ -443,6 +450,8 @@ dist_junk += config.status config.h Makefile config.log
 
 dist_files = \
   $(sprojs) \
+  ci-tests/trigger-delegation.cc \
+  ci-tests/test-trigger-delegation \
   README \
   style-guide.txt \
   mcppbs-uguide.txt \

@@ -289,6 +289,7 @@ public:
   reg_t tdata3_read(unsigned index) const noexcept;
   bool tdata3_write(unsigned index, const reg_t val) noexcept;
   reg_t tinfo_read(unsigned index) const noexcept;
+  bool get_trigger_dmode(unsigned index) const noexcept;
 
   unsigned count() const { return triggers.size(); }
 

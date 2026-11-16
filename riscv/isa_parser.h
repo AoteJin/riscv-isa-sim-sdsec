@@ -111,6 +111,10 @@ typedef enum {
   EXT_SSNPM,
   EXT_SMAIA,
   EXT_SSAIA,
+  EXT_SMTDELEG,
+  EXT_SSTCFG,
+  EXT_SUCSRIND,
+  EXT_SUTCFG,
   NUM_ISA_EXTENSIONS
 } isa_extension_t;
 

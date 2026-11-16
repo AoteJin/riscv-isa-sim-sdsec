@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+src="$(cd "$(dirname "$0")/.." && pwd)"
+build="${1:-$src/build}"
+output="$(mktemp -d "${TMPDIR:-/tmp}/trigger-delegation.XXXXXX")"
+trap 'rm -rf "$output"' EXIT
+read -r -a compiler <<< "${CXX:-c++}"
+"${compiler[@]}" -std=c++20 -O0 -g \
+    -I "$build" -I "$src/riscv" -I "$src/fesvr" -I "$src/softfloat" \
+    "$src/ci-tests/trigger-delegation.cc" \
+    "$build/libriscv.a" "$build/libdisasm.a" "$build/libsoftfloat.a" \
+    "$build/libfesvr.a" "$build/libfdt.a" -lpthread -o "$output/test"
+"$output/test"

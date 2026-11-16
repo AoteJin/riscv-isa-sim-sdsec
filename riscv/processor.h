@@ -341,6 +341,7 @@ public:
 
   bool is_debug_allowed(uint8_t prv, bool virt);
   bool is_mmode_debug_allowed() const;
+  bool can_manage_dmode() const;
   void set_debug_privilege();
 
   void set_pmp_num(reg_t pmp_num);

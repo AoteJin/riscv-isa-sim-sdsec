@@ -251,6 +251,38 @@ isa_parser_t::isa_parser_t(const char* str, const char *priv)
       extension_table[EXT_SMEPMP] = true;
     } else if (ext_str == "sdsec") {
       extension_table[EXT_SDSEC] = true;
+      extension_table[EXT_SMSTATEEN] = true;
+      extension_table[EXT_SMCSRIND] = true;
+      extension_table[EXT_SSCSRIND] = true;
+      extension_table[EXT_SUCSRIND] = true;
+      extension_table[EXT_SMTDELEG] = true;
+      extension_table[EXT_SSTCFG] = true;
+      extension_table[EXT_SUTCFG] = true;
+    } else if (ext_str == "smtdeleg") {
+      extension_table[EXT_SMTDELEG] = true;
+      extension_table[EXT_SSTCFG] = true;
+      extension_table[EXT_SMCSRIND] = true;
+      extension_table[EXT_SSCSRIND] = true;
+      extension_table[EXT_SMSTATEEN] = true;
+    } else if (ext_str == "sstcfg") {
+      extension_table[EXT_SSTCFG] = true;
+      extension_table[EXT_SMTDELEG] = true;
+      extension_table[EXT_SMCSRIND] = true;
+      extension_table[EXT_SSCSRIND] = true;
+      extension_table[EXT_SMSTATEEN] = true;
+    } else if (ext_str == "sucsrind") {
+      extension_table[EXT_SUCSRIND] = true;
+      extension_table[EXT_SMCSRIND] = true;
+      extension_table[EXT_SSCSRIND] = true;
+      extension_table[EXT_SMSTATEEN] = true;
+    } else if (ext_str == "sutcfg") {
+      extension_table[EXT_SUTCFG] = true;
+      extension_table[EXT_SUCSRIND] = true;
+      extension_table[EXT_SMTDELEG] = true;
+      extension_table[EXT_SSTCFG] = true;
+      extension_table[EXT_SMCSRIND] = true;
+      extension_table[EXT_SSCSRIND] = true;
+      extension_table[EXT_SMSTATEEN] = true;
     } else if (ext_str == "smstateen") {
       extension_table[EXT_SMSTATEEN] = true;
     } else if (ext_str == "smpmpmt") {

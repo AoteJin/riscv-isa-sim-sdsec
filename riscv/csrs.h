@@ -165,6 +165,7 @@ class mdtcfg_csr_t: public basic_csr_t {
   bool get_sedbgalw() const noexcept;
   bool get_vsedbgalw() const noexcept;
   bool get_uedbgalw() const noexcept;
+  bool get_vuedbgalw() const noexcept;
  protected:
   virtual bool unlogged_write(const reg_t val) noexcept override;
 };
@@ -706,6 +707,26 @@ class tinfo_csr_t: public csr_t {
   virtual bool unlogged_write(const reg_t UNUSED val) noexcept override { return false; };
 };
 
+enum trig_deleg_view_t {
+  TRIG_VIEW_S,
+  TRIG_VIEW_VS,
+  TRIG_VIEW_U
+};
+
+class delegated_trig_csr_t: public csr_t {
+ public:
+  delegated_trig_csr_t(processor_t* const proc, const reg_t addr, trig_deleg_view_t view, unsigned reg_idx);
+  virtual void verify_permissions(insn_t insn, bool write) const override;
+  virtual reg_t read() const noexcept override;
+ protected:
+  virtual bool unlogged_write(const reg_t val) noexcept override;
+ private:
+  bool is_type_supported(unsigned type) const noexcept;
+  bool is_dmode_blocked(unsigned index) const noexcept;
+  trig_deleg_view_t view;
+  unsigned reg_idx;
+};
+
 // For CSRs that are only writable from debug mode
 class debug_mode_csr_t: public basic_csr_t {
  public:
@@ -1079,6 +1100,27 @@ class siselect_csr_t: public basic_csr_t {
  public:
   siselect_csr_t(processor_t* const proc, const reg_t addr, const reg_t init);
   virtual void verify_permissions(insn_t insn, bool write) const override;
+};
+
+class uiselect_csr_t: public basic_csr_t {
+ public:
+  uiselect_csr_t(processor_t* const proc, const reg_t addr, const reg_t init);
+  virtual void verify_permissions(insn_t insn, bool write) const override;
+};
+
+class sucsrind_reg_csr_t : public csr_t {
+ public:
+  typedef std::shared_ptr<sucsrind_reg_csr_t> sucsrind_reg_csr_t_p;
+  sucsrind_reg_csr_t(processor_t* const proc, const reg_t addr, csr_t_p iselect);
+  reg_t read() const noexcept override;
+  virtual void verify_permissions(insn_t insn, bool write) const override;
+  void add_ireg_proxy(const reg_t iselect_val, csr_t_p proxy_csr);
+ protected:
+  virtual bool unlogged_write(const reg_t val) noexcept override;
+ private:
+  csr_t_p iselect;
+  std::unordered_map<reg_t, csr_t_p> ireg_proxy;
+  csr_t_p get_reg() const noexcept;
 };
 
 class aia_csr_t: public masked_csr_t {

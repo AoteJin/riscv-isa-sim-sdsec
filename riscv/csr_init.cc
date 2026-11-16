@@ -369,8 +369,12 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
   if (proc->extension_enabled_const(EXT_SMSTATEEN)) {
     const reg_t sstateen0_mask = (proc->extension_enabled(EXT_ZFINX) ? SSTATEEN0_FCSR : 0) |
                                  (proc->extension_enabled(EXT_ZCMT) ? SSTATEEN0_JVT : 0) |
+                                 (proc->extension_enabled(EXT_SUTCFG) ? SSTATEEN0_TR : 0) |
+                                 (proc->extension_enabled(EXT_SUCSRIND) ? SSTATEEN0_UCSRIND : 0) |
                                  SSTATEEN0_CS;
-    const reg_t hstateen0_mask = sstateen0_mask | HSTATEEN0_CSRIND | HSTATEEN0_SENVCFG | HSTATEEN_SSTATEEN;
+    const reg_t hstateen0_mask = sstateen0_mask |
+                                 ((proc->extension_enabled(EXT_SMTDELEG) || proc->extension_enabled(EXT_SSTCFG)) ? HSTATEEN0_TR : 0) |
+                                 HSTATEEN0_CSRIND | HSTATEEN0_SENVCFG | HSTATEEN_SSTATEEN;
     const reg_t mstateen0_mask = hstateen0_mask | (proc->extension_enabled(EXT_SSQOSID) ?  MSTATEEN0_PRIV114 : 0);
     for (int i = 0; i < 4; i++) {
       const reg_t mstateen_mask = i == 0 ? mstateen0_mask : MSTATEEN_HSTATEEN;
@@ -454,6 +458,10 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
     auto sireg = std::make_shared<sscsrind_reg_csr_t>(proc, CSR_SIREG, siselect);
     add_ireg_proxy(proc, sireg);
     add_supervisor_csr(CSR_SIREG, std::make_shared<virtualized_indirect_csr_t>(proc, sireg, vsireg));
+    if (proc->extension_enabled(EXT_SMTDELEG) || proc->extension_enabled(EXT_SSTCFG)) {
+      sireg->add_ireg_proxy(SISELECT_TRIG, std::make_shared<delegated_trig_csr_t>(proc, CSR_SIREG, TRIG_VIEW_S, 1));
+      vsireg->add_ireg_proxy(VSISELECT_TRIG, std::make_shared<delegated_trig_csr_t>(proc, CSR_VSIREG, TRIG_VIEW_VS, 1));
+    }
     if (proc->extension_enabled(EXT_SSCCFG) || proc->extension_enabled(EXT_SMCDELEG)) {
       // case CSR_SIREG
       if (proc->extension_enabled_const(EXT_ZICNTR)) {
@@ -474,6 +482,11 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
 
       auto sireg = std::make_shared<sscsrind_reg_csr_t>(proc, sireg_csrs[i], siselect);
       add_supervisor_csr(sireg_csrs[i], std::make_shared<virtualized_indirect_csr_t>(proc, sireg, vsireg));
+
+      if (proc->extension_enabled(EXT_SMTDELEG) || proc->extension_enabled(EXT_SSTCFG)) {
+        sireg->add_ireg_proxy(SISELECT_TRIG, std::make_shared<delegated_trig_csr_t>(proc, sireg_csrs[i], TRIG_VIEW_S, i + 2));
+        vsireg->add_ireg_proxy(VSISELECT_TRIG, std::make_shared<delegated_trig_csr_t>(proc, vsireg_csrs[i], TRIG_VIEW_VS, i + 2));
+      }
 
       // Smcdeleg
       if (proc->extension_enabled(EXT_SSCCFG) || proc->extension_enabled(EXT_SMCDELEG)) {
@@ -517,6 +530,20 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
             break;
         }
       }
+    }
+  }
+
+  if (proc->extension_enabled_const(EXT_SUCSRIND)) {
+    csr_t_p uiselect = std::make_shared<uiselect_csr_t>(proc, CSR_UISELECT, 0);
+    add_user_csr(CSR_UISELECT, uiselect);
+
+    const reg_t uireg_csrs[] = { CSR_UIREG, CSR_UIREG2, CSR_UIREG3, CSR_UIREG4, CSR_UIREG5, CSR_UIREG6 };
+    for (size_t i = 0; i < std::size(uireg_csrs); i++) {
+      auto uireg = std::make_shared<sucsrind_reg_csr_t>(proc, uireg_csrs[i], uiselect);
+      if (proc->extension_enabled(EXT_SUTCFG)) {
+        uireg->add_ireg_proxy(UISELECT_TRIG, std::make_shared<delegated_trig_csr_t>(proc, uireg_csrs[i], TRIG_VIEW_U, i + 1));
+      }
+      add_user_csr(uireg_csrs[i], uireg);
     }
   }
 
