@@ -367,6 +367,11 @@ trigger-delegation-utst.out: libriscv.a libdisasm.a libsoftfloat.a libfesvr.a li
 test_outs += trigger-delegation-utst.out
 junk += trigger-delegation-utst.out
 
+check-debug-isolation: libriscv.a libdisasm.a libsoftfloat.a libfesvr.a libfdt.a
+	CXX="$(CXX)" $(src_dir)/ci-tests/test-debug-isolation "$(CURDIR)"
+
+.PHONY: check-debug-isolation
+
 check : $(test_outs)
 	echo; grep -h -e'Unit Tests' -e'FAILED' -e'Segementation' $^ < /dev/null; echo
 
@@ -452,6 +457,9 @@ dist_files = \
   $(sprojs) \
   ci-tests/trigger-delegation.cc \
   ci-tests/test-trigger-delegation \
+  ci-tests/debug-isolation.cc \
+  ci-tests/test-debug-isolation \
+  ci-tests/debug-isolation.md \
   README \
   style-guide.txt \
   mcppbs-uguide.txt \

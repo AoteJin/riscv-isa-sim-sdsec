@@ -891,7 +891,7 @@ bool processor_t::can_manage_dmode() const {
     return !is_mmode_debug_allowed() && !state.mdtcfg->get_sedbgalw();
   if (state.prv == PRV_S && state.v)
     return !is_mmode_debug_allowed() && !state.mdtcfg->get_sedbgalw() &&
-           !state.mdtcfg->get_uedbgalw() && !state.mdtcfg->get_vsedbgalw();
+           !state.mdtcfg->get_vsedbgalw();
   return false;
 }
 

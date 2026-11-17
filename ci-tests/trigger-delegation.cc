@@ -95,9 +95,9 @@ void check_access_matrix(processor_t& p) {
   p.get_state()->debug_mode=false;
   struct Mode { const char* name; unsigned prv; bool v; unsigned csr; };
   const Mode modes[]={{"M",PRV_M,false,CSR_SIREG2},{"HS",PRV_S,false,CSR_SIREG2},{"VS",PRV_S,true,CSR_SIREG2},{"U",PRV_U,false,CSR_UIREG2},{"VU",PRV_U,true,CSR_UIREG2}};
-  for (auto mode:modes) for (reg_t policy:{reg_t(0),reg_t(1),reg_t(2),reg_t(4)}) {
+  for (auto mode:modes) for (reg_t policy = 0; policy < 16; ++policy) {
     reset(); p.put_csr(CSR_TDATA2,0x12345678); p.put_csr(CSR_MDTCFG,policy); p.set_privilege(mode.prv,mode.v);
-    bool allowed=mode.prv==PRV_M || (mode.prv==PRV_S && !(policy&1) && (!mode.v || !(policy&6)));
+    bool allowed=mode.prv==PRV_M || (mode.prv==PRV_S && !(policy&1) && (!mode.v || !(policy&2)));
     check(std::string("DMODE ")+mode.name+" policy="+std::to_string(policy),read_csr(p,mode.csr),allowed?0x12345678:0);
     write_csr(p,mode.csr,0x87654321);
     p.set_privilege(PRV_M,false);
